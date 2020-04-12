@@ -1,0 +1,8 @@
+[package]
+name = "bmpstitch"
+version = "0.1.0"
+authors = ["Matthew Jacobs <majacobs@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+rand = "0.7.2"
