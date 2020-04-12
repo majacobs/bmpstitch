@@ -1,11 +1,12 @@
 use crate::floss::flosses::Floss;
 use std::collections::HashMap;
+use crate::color::{Color, Rgb};
 
-pub fn reduce_to_known<'a>(
+pub fn reduce_to_known<'a, C>(
     k: usize,
-    points: &Vec<(u8, u8, u8)>,
+    points: &Vec<C>,
     mut flosses: Vec<Floss<'a>>,
-) -> Vec<Floss<'a>> {
+) -> Vec<Floss<'a>> where C: Color + From<Rgb> {
     if flosses.len() <= k {
         return flosses;
     }
@@ -24,15 +25,15 @@ pub fn reduce_to_known<'a>(
     }
 }
 
-fn iterate<'a>(flosses: Vec<Floss<'a>>, points: &Vec<(u8, u8, u8)>) -> Vec<(Floss<'a>, usize)> {
+fn iterate<'a, C>(flosses: Vec<Floss<'a>>, points: &Vec<C>) -> Vec<(Floss<'a>, usize)> where C: Color + From<Rgb> {
     let mut all_distances = HashMap::new();
 
     for point in points.iter() {
         let mut closest = std::usize::MAX;
-        let mut closest_distance = std::u32::MAX;
+        let mut closest_distance = std::f32::MAX;
 
-        for (i, c) in flosses.iter().enumerate() {
-            let d = distance_p(&c, &point);
+        for (i, f) in flosses.iter().enumerate() {
+            let d = point.dist(&f.color.into());
             if d < closest_distance {
                 closest = i;
                 closest_distance = d;
@@ -56,9 +57,9 @@ fn iterate<'a>(flosses: Vec<Floss<'a>>, points: &Vec<(u8, u8, u8)>) -> Vec<(Flos
             continue;
         }
 
-        const DISTANCE: u32 = 25;
+        const DISTANCE: f32 = 25.0;
         for other in right.iter_mut().rev() {
-            if distance_f(&x.0, &other.0) <= DISTANCE {
+            if x.0.color.dist(&other.0.color) <= DISTANCE {
                 x.1 += other.1;
                 other.1 = 0;
                 break;
@@ -69,18 +70,3 @@ fn iterate<'a>(flosses: Vec<Floss<'a>>, points: &Vec<(u8, u8, u8)>) -> Vec<(Flos
     centers_with_count
 }
 
-fn distance_p(floss: &Floss, point: &(u8, u8, u8)) -> u32 {
-    let diff0 = floss.red as f32 - point.0 as f32;
-    let diff1 = floss.green as f32 - point.1 as f32;
-    let diff2 = floss.blue as f32 - point.2 as f32;
-    let sum = diff0.powi(2) + diff1.powi(2) + diff2.powi(2);
-    sum.sqrt() as u32
-}
-
-fn distance_f(a: &Floss, b: &Floss) -> u32 {
-    let diff0 = a.red as f32 - b.red as f32;
-    let diff1 = a.green as f32 - b.green as f32;
-    let diff2 = a.blue as f32 - b.blue as f32;
-    let sum = diff0.powi(2) + diff1.powi(2) + diff2.powi(2);
-    sum.sqrt() as u32
-}

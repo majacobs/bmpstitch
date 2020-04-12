@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::prelude::*;
+use crate::color::Rgb;
 
 pub struct Bmp {
     pub header: Header,
@@ -14,9 +15,7 @@ pub struct Header {
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Pixel {
-    pub red: u8,
-    pub green: u8,
-    pub blue: u8,
+    pub color: Rgb,
 }
 
 impl Bmp {
@@ -89,22 +88,18 @@ impl Pixel {
         let red = iter.next().ok_or("Red")?;
 
         Ok(Pixel {
-            red: *red,
-            green: *green,
-            blue: *blue,
+            color: Rgb::new(*red, *green, *blue),
         })
     }
 
     pub fn from(red: u8, green: u8, blue: u8) -> Self {
         Pixel {
-            red: red,
-            green: green,
-            blue: blue,
+            color: Rgb::new(red, green, blue),
         }
     }
 
     pub fn parts(&self) -> (u8, u8, u8) {
-        (self.red, self.green, self.blue)
+        (self.color.r, self.color.g, self.color.b)
     }
 }
 

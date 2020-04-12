@@ -11,6 +11,7 @@ use crate::floss::algorithm::reduce_to_known;
 use crate::floss::flosses::get_dmc_floss;
 use crate::kmeans::run_kmeans;
 use crate::misc::distance_u8;
+use crate::color::Hsl;
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::File;
@@ -85,15 +86,15 @@ fn kmeans_reduce(num_colors: usize, pixels: &mut Vec<Pixel>) {
 }
 
 fn floss_reduce(num_colors: usize, pixels: &mut Vec<Pixel>) {
-    let pixel_parts: Vec<_> = pixels.iter().map(|p| p.parts()).collect();
+    let pixel_parts: Vec<Hsl> = pixels.iter().map(|p| p.color.into()).collect();
     let all_floss = get_dmc_floss();
     let chosen_floss = reduce_to_known(num_colors, &pixel_parts, all_floss);
     let colors: Vec<_> = chosen_floss
         .iter()
         .map(|f| {
             (
-                (f.red, f.green, f.blue),
-                Pixel::from(f.red, f.green, f.blue),
+                (f.color.r, f.color.g, f.color.b),
+                Pixel::from(f.color.r, f.color.g, f.color.b),
             )
         })
         .collect();
@@ -146,9 +147,9 @@ table.display .symbol-{0} {{ background-color: #{1:02x}{2:02x}{3:02x}; }}
 .printable .symbol-{0}::before,
 #palette .symbol-{0}::before {{ content: '{4}'; }}",
             i,
-            p.red,
-            p.green,
-            p.blue,
+            p.color.r,
+            p.color.g,
+            p.color.b,
             symbol(*i)
         ))?;
     }

@@ -1,11 +1,12 @@
 use std::cmp::PartialEq;
 use std::convert::From;
+use std::hash::Hash;
 
-trait Color: Copy + Clone {
+pub trait Color: Copy + Clone {
     fn dist(&self, other: &Self) -> f32;
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Hash)]
 pub struct Rgb {
     pub r: u8,
     pub g: u8,
@@ -39,6 +40,8 @@ impl PartialEq for Rgb {
         self.r == other.r && self.g == other.g && self.b == other.b
     }
 }
+
+impl Eq for Rgb {}
 
 impl From<Hsl> for Rgb {
     fn from(item: Hsl) -> Rgb {
@@ -131,13 +134,18 @@ impl PartialEq for Hsl {
     }
 }
 
+impl Eq for Hsl {}
+
 impl Color for Hsl {
     fn dist(&self, other: &Self) -> f32 {
-        let dh = self.h - other.h;
+        // Normalize hue to [0, 1] and have the angle wrap around.
+        let phi = ((self.h - other.h).abs() % 360.0) / 360.0;
+        let dh = if phi > 0.5 { 1.0 - phi } else { phi };
         let ds = self.s - other.s;
         let dl = self.l - other.l;
 
-        (dh * dh + ds * ds + dl * dl).sqrt()
+        const HUE_WEIGHT: f32 = 4.0;
+        (HUE_WEIGHT * dh * dh + ds * ds + dl * dl).sqrt()
     }
 }
 
