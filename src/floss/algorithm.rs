@@ -1,12 +1,15 @@
+use crate::color::{Color, Rgb};
 use crate::floss::flosses::Floss;
 use std::collections::HashMap;
-use crate::color::{Color, Rgb};
 
 pub fn reduce_to_known<'a, C>(
     k: usize,
     points: &Vec<C>,
     mut flosses: Vec<Floss<'a>>,
-) -> Vec<Floss<'a>> where C: Color + From<Rgb> {
+) -> Vec<Floss<'a>>
+where
+    C: Color + From<Rgb>,
+{
     if flosses.len() <= k {
         return flosses;
     }
@@ -25,7 +28,10 @@ pub fn reduce_to_known<'a, C>(
     }
 }
 
-fn iterate<'a, C>(flosses: Vec<Floss<'a>>, points: &Vec<C>) -> Vec<(Floss<'a>, usize)> where C: Color + From<Rgb> {
+fn iterate<'a, C>(flosses: Vec<Floss<'a>>, points: &Vec<C>) -> Vec<(Floss<'a>, usize)>
+where
+    C: Color + From<Rgb>,
+{
     let mut all_distances = HashMap::new();
 
     for point in points.iter() {
@@ -69,4 +75,3 @@ fn iterate<'a, C>(flosses: Vec<Floss<'a>>, points: &Vec<C>) -> Vec<(Floss<'a>, u
 
     centers_with_count
 }
-

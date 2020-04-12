@@ -2,8 +2,8 @@ const MIN_ATTEMPTS: usize = 1_000;
 const ITERATIONS: usize = 5;
 const MIN_DISTANCE: f32 = 800.0;
 
-use rand::Rng;
 use crate::color::{Color, Rgb};
+use rand::Rng;
 
 pub trait Coord: Sized + Clone {
     fn rand() -> Self;
@@ -164,11 +164,10 @@ impl Coord for Rgb {
             )
         });
 
-        Rgb::new
-        (
+        Rgb::new(
             (sum.0 / count) as u8,
             (sum.1 / count) as u8,
-            (sum.2 / count) as u8
+            (sum.2 / count) as u8,
         )
     }
 

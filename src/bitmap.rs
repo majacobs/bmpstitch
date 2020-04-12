@@ -1,6 +1,6 @@
+use crate::color::Rgb;
 use std::fs::File;
 use std::io::prelude::*;
-use crate::color::Rgb;
 
 pub struct Bmp {
     pub header: Header,

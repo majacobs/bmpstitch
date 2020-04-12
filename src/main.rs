@@ -6,10 +6,10 @@ mod floss;
 mod kmeans;
 
 use crate::bitmap::{Bmp, Pixel};
+use crate::color::{Color, Hsl};
 use crate::floss::algorithm::reduce_to_known;
 use crate::floss::flosses::get_dmc_floss;
 use crate::kmeans::run_kmeans;
-use crate::color::{Color, Hsl};
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::File;
@@ -89,12 +89,7 @@ fn floss_reduce(num_colors: usize, pixels: &mut Vec<Pixel>) {
     let chosen_floss = reduce_to_known(num_colors, &pixel_parts, all_floss);
     let palette: Vec<_> = chosen_floss
         .iter()
-        .map(|f| {
-            (
-                f.color,
-                Pixel::from(f.color.r, f.color.g, f.color.b),
-            )
-        })
+        .map(|f| (f.color, Pixel::from(f.color.r, f.color.g, f.color.b)))
         .collect();
 
     for pixel in pixels.iter_mut() {
