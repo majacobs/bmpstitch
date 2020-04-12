@@ -4,14 +4,12 @@ mod bitmap;
 mod color;
 mod floss;
 mod kmeans;
-mod misc;
 
 use crate::bitmap::{Bmp, Pixel};
 use crate::floss::algorithm::reduce_to_known;
 use crate::floss::flosses::get_dmc_floss;
 use crate::kmeans::run_kmeans;
-use crate::misc::distance_u8;
-use crate::color::Hsl;
+use crate::color::{Color, Hsl};
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::File;
@@ -59,26 +57,26 @@ fn print_usage() {
 }
 
 fn kmeans_reduce(num_colors: usize, pixels: &mut Vec<Pixel>) {
-    let pixel_parts: Vec<_> = pixels.iter().map(|p| p.parts()).collect();
-    let means = run_kmeans(num_colors, &pixel_parts);
-    let colors: Vec<_> = means
+    let original_colors: Vec<_> = pixels.iter().map(|p| p.color).collect();
+    let means = run_kmeans(num_colors, &original_colors);
+    let palette: Vec<_> = means
         .iter()
-        .map(|c| (c, Pixel::from(c.0, c.1, c.2)))
+        .map(|c| (c, Pixel::from(c.r, c.g, c.b)))
         .collect();
 
     for pixel in pixels.iter_mut() {
         let mut replacement = Pixel::from(255, 0, 255);
         let mut best_dist = std::f32::MAX;
-        let parts = &pixel.parts();
+        let parts = &pixel.color;
 
-        for (coords, color) in colors.iter() {
-            let dist = distance_u8(coords, &parts);
+        for (color, pixel) in palette.iter() {
+            let dist = color.dist(&parts);
             if dist > best_dist {
                 continue;
             }
 
             best_dist = dist;
-            replacement = color.clone();
+            replacement = pixel.clone();
         }
 
         *pixel = replacement;
@@ -89,11 +87,11 @@ fn floss_reduce(num_colors: usize, pixels: &mut Vec<Pixel>) {
     let pixel_parts: Vec<Hsl> = pixels.iter().map(|p| p.color.into()).collect();
     let all_floss = get_dmc_floss();
     let chosen_floss = reduce_to_known(num_colors, &pixel_parts, all_floss);
-    let colors: Vec<_> = chosen_floss
+    let palette: Vec<_> = chosen_floss
         .iter()
         .map(|f| {
             (
-                (f.color.r, f.color.g, f.color.b),
+                f.color,
                 Pixel::from(f.color.r, f.color.g, f.color.b),
             )
         })
@@ -102,16 +100,16 @@ fn floss_reduce(num_colors: usize, pixels: &mut Vec<Pixel>) {
     for pixel in pixels.iter_mut() {
         let mut replacement = Pixel::from(255, 0, 255);
         let mut best_dist = std::f32::MAX;
-        let parts = &pixel.parts();
+        let parts = &pixel.color;
 
-        for (coords, color) in colors.iter() {
-            let dist = distance_u8(coords, &parts);
+        for (color, pixel) in palette.iter() {
+            let dist = color.dist(&parts);
             if dist > best_dist {
                 continue;
             }
 
             best_dist = dist;
-            replacement = color.clone();
+            replacement = pixel.clone();
         }
 
         *pixel = replacement;
@@ -172,10 +170,10 @@ h2 {{ page-break-before: always; }}
 <div id=\"palette\">
 <table>"
     ))?;
-    for i in 0..map.len() {
+    for (pixel, i) in map.iter() {
         file.write_fmt(format_args!("
-<tr><td><span class=\"color color-{0}\"></span></td><td><span class=\"symbol-{0}\"></span></td></tr>",
-            i
+<tr><td><span class=\"color color-{0}\"></span></td><td><span class=\"symbol-{0}\"></span></td><td>{1}</td></tr>",
+            i, pixel.color.name()
             ))?;
     }
 

@@ -3,6 +3,7 @@ const ITERATIONS: usize = 5;
 const MIN_DISTANCE: f32 = 800.0;
 
 use rand::Rng;
+use crate::color::{Color, Rgb};
 
 pub trait Coord: Sized + Clone {
     fn rand() -> Self;
@@ -143,6 +144,41 @@ impl Coord for (u8, u8, u8) {
         let diff2 = self.2 as f32 - other.2 as f32;
         let sum = diff0.powi(2) + diff1.powi(2) + diff2.powi(2);
         sum
+        //sum.sqrt()
+    }
+}
+
+impl Coord for Rgb {
+    fn rand() -> Self {
+        let mut rng = rand::thread_rng();
+        Rgb::new(rng.gen(), rng.gen(), rng.gen())
+    }
+
+    fn mean(coords: &Vec<&Self>) -> Self {
+        let count = coords.len() as f32;
+        let sum = coords.iter().fold((0.0, 0.0, 0.0), |sum, x| {
+            (
+                sum.0 + f32::from(x.r),
+                sum.1 + f32::from(x.g),
+                sum.2 + f32::from(x.b),
+            )
+        });
+
+        Rgb::new
+        (
+            (sum.0 / count) as u8,
+            (sum.1 / count) as u8,
+            (sum.2 / count) as u8
+        )
+    }
+
+    fn distance(&self, other: &Self) -> f32 {
+        self.dist(other)
+        //let diff0 = self.0 as f32 - other.0 as f32;
+        //let diff1 = self.1 as f32 - other.1 as f32;
+        //let diff2 = self.2 as f32 - other.2 as f32;
+        //let sum = diff0.powi(2) + diff1.powi(2) + diff2.powi(2);
+        //sum
         //sum.sqrt()
     }
 }

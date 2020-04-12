@@ -97,10 +97,6 @@ impl Pixel {
             color: Rgb::new(red, green, blue),
         }
     }
-
-    pub fn parts(&self) -> (u8, u8, u8) {
-        (self.color.r, self.color.g, self.color.b)
-    }
 }
 
 fn expect<'a, I>(iter: &mut I, expected: u8) -> Result<(), String>

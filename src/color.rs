@@ -4,6 +4,7 @@ use std::hash::Hash;
 
 pub trait Color: Copy + Clone {
     fn dist(&self, other: &Self) -> f32;
+    fn name(&self) -> String;
 }
 
 #[derive(Debug, Copy, Clone, Hash)]
@@ -81,7 +82,11 @@ impl Color for Rgb {
         let dg = (self.g as f32) - (other.g as f32);
         let db = (self.b as f32) - (other.b as f32);
 
-        (dr * dr + dg * dg + db * db).sqrt()
+        (dr.powi(2) + dg.powi(2) + db.powi(2)).sqrt()
+    }
+
+    fn name(&self) -> String {
+        format!("#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
     }
 }
 
@@ -145,7 +150,11 @@ impl Color for Hsl {
         let dl = self.l - other.l;
 
         const HUE_WEIGHT: f32 = 4.0;
-        (HUE_WEIGHT * dh * dh + ds * ds + dl * dl).sqrt()
+        (HUE_WEIGHT * dh.powi(2) + ds.powi(2) + dl.powi(2)).sqrt()
+    }
+
+    fn name(&self) -> String {
+        format!("hsl({}, {}, {})", self.h, self.s, self.l)
     }
 }
 
