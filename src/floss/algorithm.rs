@@ -14,12 +14,14 @@ where
         return flosses;
     }
 
+    let mut flosses: Vec<(_, C)> = flosses.drain(..).map(|f| (f, f.color.into())).collect();
+
     loop {
         println!("Down to {} colors", flosses.len());
 
         let mut measured_flosses = iterate(flosses, points);
         if measured_flosses.len() <= k {
-            return measured_flosses.iter().map(|f| f.0).collect();
+            return measured_flosses.iter().map(|f| (f.0).0).collect();
         }
 
         measured_flosses.sort_by_key(|f| f.1);
@@ -28,7 +30,7 @@ where
     }
 }
 
-fn iterate<'a, C>(flosses: Vec<Floss<'a>>, points: &Vec<C>) -> Vec<(Floss<'a>, usize)>
+fn iterate<'a, C>(flosses: Vec<(Floss<'a>, C)>, points: &Vec<C>) -> Vec<((Floss<'a>, C), usize)>
 where
     C: Color + From<Rgb>,
 {
@@ -38,8 +40,8 @@ where
         let mut closest = std::usize::MAX;
         let mut closest_distance = std::f32::MAX;
 
-        for (i, f) in flosses.iter().enumerate() {
-            let d = point.dist(&f.color.into());
+        for (i, (_, color)) in flosses.iter().enumerate() {
+            let d = point.dist(color);
             if d < closest_distance {
                 closest = i;
                 closest_distance = d;
@@ -65,7 +67,7 @@ where
 
         const DISTANCE: f32 = 25.0;
         for other in right.iter_mut().rev() {
-            if x.0.color.dist(&other.0.color) <= DISTANCE {
+            if (x.0).1.dist(&(other.0).1) <= DISTANCE {
                 x.1 += other.1;
                 other.1 = 0;
                 break;

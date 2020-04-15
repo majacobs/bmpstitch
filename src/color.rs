@@ -149,7 +149,7 @@ impl Color for Hsl {
         let ds = self.s - other.s;
         let dl = self.l - other.l;
 
-        const HUE_WEIGHT: f32 = 4.0;
+        const HUE_WEIGHT: f32 = 8.0;
         (HUE_WEIGHT * dh.powi(2) + ds.powi(2) + dl.powi(2)).sqrt()
     }
 
