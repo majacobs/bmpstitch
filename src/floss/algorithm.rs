@@ -65,7 +65,7 @@ where
             continue;
         }
 
-        const DISTANCE: f32 = 25.0;
+        const DISTANCE: f32 = 0.1;
         for other in right.iter_mut().rev() {
             if (x.0).1.dist(&(other.0).1) <= DISTANCE {
                 x.1 += other.1;

@@ -51,14 +51,31 @@ impl Header {
         I: Iterator<Item = &'a u8>,
     {
         const HEADER_V4_SIZE: u32 = 108;
+        const HEADER_V5_SIZE: u32 = 124;
         let dib_size = read_u32(iter)?;
         match dib_size {
             HEADER_V4_SIZE => Header::parse_v4(iter),
+            HEADER_V5_SIZE => Header::parse_v5(iter),
             _ => Err("Unrecognized DIB size"),
         }
     }
 
     fn parse_v4<'a, I>(iter: &mut I) -> Result<Self, &'static str>
+    where
+        I: Iterator<Item = &'a u8>,
+    {
+        let width = read_u32(iter)?;
+        let height = read_u32(iter)?;
+        read_u16(iter)?; // Color planes
+        let bits_per_pixel = read_u16(iter)?;
+        Ok(Header {
+            width: width,
+            height: height,
+            bits_per_pixel: bits_per_pixel,
+        })
+    }
+
+    fn parse_v5<'a, I>(iter: &mut I) -> Result<Self, &'static str>
     where
         I: Iterator<Item = &'a u8>,
     {
@@ -79,13 +96,17 @@ impl Pixel {
     where
         I: Iterator<Item = &'a u8>,
     {
-        if bits_per_pixel != 24 {
+        if bits_per_pixel != 24 && bits_per_pixel != 32 {
             return Err("bpp");
         }
 
         let blue = iter.next().ok_or("Blue")?;
         let green = iter.next().ok_or("Green")?;
         let red = iter.next().ok_or("Red")?;
+
+        if bits_per_pixel == 32 {
+            iter.next().ok_or("Extra")?;
+        }
 
         Ok(Pixel {
             color: Rgb::new(*red, *green, *blue),

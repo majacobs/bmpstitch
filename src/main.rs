@@ -3,13 +3,12 @@ extern crate rand;
 mod bitmap;
 mod color;
 mod floss;
-mod kmeans;
 
 use crate::bitmap::{Bmp, Pixel};
 use crate::color::{Color, Hsl};
 use crate::floss::algorithm::reduce_to_known;
 use crate::floss::flosses::get_dmc_floss;
-use crate::kmeans::run_kmeans;
+use crate::floss::rcv::vote;
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::File;
@@ -18,7 +17,7 @@ use std::io::prelude::*;
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 4 {
+    if args.len() < 3 {
         print_usage();
         return;
     }
@@ -31,62 +30,28 @@ fn main() {
         }
     };
 
-    let fitting_method: FittingMethod = match args[2].as_str() {
-        "kmeans" => FittingMethod::Kmeans,
-        "floss" => FittingMethod::FlossSelect,
-        _ => {
-            print_usage();
-            return;
-        }
-    };
-
-    let bitmap_name = args[3].to_string();
-    let output_name = args[4].to_string();
+    let bitmap_name = args[2].to_string();
+    let output_name = args[3].to_string();
 
     let mut bmp = Bmp::new(bitmap_name).unwrap();
-    match fitting_method {
-        FittingMethod::Kmeans => kmeans_reduce(num_colors, &mut bmp.pixels),
-        FittingMethod::FlossSelect => floss_reduce(num_colors, &mut bmp.pixels),
-    };
+    reduce(num_colors, &mut bmp.pixels);
     render(&bmp, output_name).unwrap();
 }
 
 fn print_usage() {
-    println!("<color count> <fitting method> <input bitmap> <output html>");
-    println!("Fitting methods: kmeans, floss");
+    println!("<color count> <input bitmap> <output html>");
 }
 
-fn kmeans_reduce(num_colors: usize, pixels: &mut Vec<Pixel>) {
-    let original_colors: Vec<_> = pixels.iter().map(|p| p.color).collect();
-    let means = run_kmeans(num_colors, &original_colors);
-    let palette: Vec<_> = means
-        .iter()
-        .map(|c| (c, Pixel::from(c.r, c.g, c.b)))
-        .collect();
+const USE_VOTING: bool = true;
 
-    for pixel in pixels.iter_mut() {
-        let mut replacement = Pixel::from(255, 0, 255);
-        let mut best_dist = std::f32::MAX;
-        let parts = &pixel.color;
-
-        for (color, pixel) in palette.iter() {
-            let dist = color.dist(&parts);
-            if dist > best_dist {
-                continue;
-            }
-
-            best_dist = dist;
-            replacement = pixel.clone();
-        }
-
-        *pixel = replacement;
-    }
-}
-
-fn floss_reduce(num_colors: usize, pixels: &mut Vec<Pixel>) {
+fn reduce(num_colors: usize, pixels: &mut Vec<Pixel>) {
     let pixel_parts: Vec<Hsl> = pixels.iter().map(|p| p.color.into()).collect();
     let all_floss = get_dmc_floss();
-    let chosen_floss = reduce_to_known(num_colors, &pixel_parts, all_floss);
+    let chosen_floss = if USE_VOTING {
+        vote(num_colors, &pixel_parts, all_floss)
+    } else {
+        reduce_to_known(num_colors, &pixel_parts, all_floss)
+    };
     let palette: Vec<_> = chosen_floss
         .iter()
         .map(|f| (f.color, Pixel::from(f.color.r, f.color.g, f.color.b)))
@@ -112,8 +77,19 @@ fn floss_reduce(num_colors: usize, pixels: &mut Vec<Pixel>) {
 }
 
 fn render(bmp: &Bmp, output_name: String) -> std::io::Result<()> {
-    let map: HashSet<_> = bmp.pixels.iter().collect();
-    let map: HashMap<_, _> = map.iter().enumerate().map(|(i, p)| (p, i)).collect();
+    let mut counts = HashMap::new();
+    for pixel in bmp.pixels.iter() {
+        *counts.entry(pixel).or_insert(0i32) += 1;
+    }
+
+    let mut foo: Vec<_> = counts.iter().collect();
+    foo.sort_by_key(|&(_, count)| -count);
+
+    let map: HashMap<_, _> = foo
+        .iter()
+        .enumerate()
+        .map(|(i, &(p, &c))| (p, (i, c)))
+        .collect();
 
     let mut file = File::create(output_name)?;
     file.write_fmt(format_args!("<html>
@@ -131,9 +107,10 @@ table {{ border-collapse: collapse; }}
 .printable td:nth-child(10n+10) {{ border-right: 2px solid #000; }}
 .printable tr:first-child > td {{ border-top: 2px solid #000; }}
 .printable tr:nth-child(10n+10) > td {{ border-bottom: 2px solid #000; }}"))?;
-    for (p, i) in map.iter() {
+    for (p, (i, _)) in map.iter() {
         file.write_fmt(format_args!(
             "
+
 .color-{0} {{ background-color: #{1:02x}{2:02x}{3:02x}; }}
 table.printable .symbol-{0} {{ background-color: #{1:02x}{2:02x}{3:02x}40; }}
 table.display .symbol-{0} {{ background-color: #{1:02x}{2:02x}{3:02x}; }}
@@ -160,19 +137,7 @@ h2 {{ page-break-before: always; }}
 <body>"
     ))?;
     print_display_table(&mut file, &bmp, &map)?;
-    file.write_fmt(format_args!(
-        "
-<div id=\"palette\">
-<table>"
-    ))?;
-    for (pixel, i) in map.iter() {
-        file.write_fmt(format_args!("
-<tr><td><span class=\"color color-{0}\"></span></td><td><span class=\"symbol-{0}\"></span></td><td>{1}</td></tr>",
-            i, pixel.color.name()
-            ))?;
-    }
-
-    file.write_fmt(format_args!("</table></div>"))?;
+    print_palette(&mut file, &map)?;
     print_printable_table(&mut file, &bmp, &map)?;
     file.write_fmt(format_args!("</body></html>"))?;
 
@@ -182,7 +147,7 @@ h2 {{ page-break-before: always; }}
 fn print_display_table(
     file: &mut File,
     bmp: &Bmp,
-    map: &HashMap<&&Pixel, usize>,
+    map: &HashMap<&&Pixel, (usize, i32)>,
 ) -> std::io::Result<()> {
     file.write_fmt(format_args!("<table class=\"display\">\n"))?;
     let width = bmp.header.width as usize;
@@ -190,7 +155,7 @@ fn print_display_table(
         if i % width == 0 {
             file.write_fmt(format_args!("<tr>\n"))?;
         }
-        let color_index = map.get(&pixel).unwrap();
+        let color_index = map.get(&pixel).unwrap().0;
         file.write_fmt(format_args!("<td class=\"symbol-{}\"></td>\n", color_index))?;
         if i % width + 1 == width {
             file.write_fmt(format_args!("</tr>\n"))?;
@@ -201,10 +166,35 @@ fn print_display_table(
     Ok(())
 }
 
+fn print_palette(file: &mut File, map: &HashMap<&&Pixel, (usize, i32)>) -> std::io::Result<()> {
+    file.write_fmt(format_args!(
+        "
+<div id=\"palette\">
+<table>"
+    ))?;
+    let all_floss = get_dmc_floss();
+    for (pixel, (i, count)) in map.iter() {
+        let name = if let Some(floss) = all_floss.iter().find(|&&f| f.color == pixel.color) {
+            format!("#{0} {1}", floss.number, floss.name)
+        } else {
+            pixel.color.name()
+        };
+
+        file.write_fmt(format_args!("
+<tr><td><span class=\"color color-{0}\"></span></td><td><span class=\"symbol-{0}\"></span></td><td>{1}</td><td>{2}</td></tr>",
+            i, name, count
+            ))?;
+    }
+
+    file.write_fmt(format_args!("</table></div>"))?;
+
+    Ok(())
+}
+
 fn print_printable_table(
     file: &mut File,
     bmp: &Bmp,
-    map: &HashMap<&&Pixel, usize>,
+    map: &HashMap<&&Pixel, (usize, i32)>,
 ) -> std::io::Result<()> {
     const BLOCK_SIZE: usize = 40;
     let width = bmp.header.width as usize;
@@ -225,7 +215,7 @@ fn print_printable_table(
             for row in block {
                 file.write_fmt(format_args!("<tr>\n"))?;
                 for pixel in row {
-                    let color_index = map.get(&pixel).unwrap();
+                    let color_index = map.get(&pixel).unwrap().0;
                     file.write_fmt(format_args!("<td class=\"symbol-{}\"></td>\n", color_index))?;
                 }
                 file.write_fmt(format_args!("</tr>\n"))?;
@@ -243,26 +233,22 @@ fn symbol(n: usize) -> char {
         1 => 'B',
         2 => 'C',
         3 => 'D',
-        4 => 'H',
-        5 => 'I',
-        6 => 'J',
-        7 => 'K',
-        8 => 'L',
-        9 => 'M',
-        10 => 'O',
-        11 => 'P',
-        12 => 'S',
-        13 => 'T',
-        14 => 'U',
-        15 => 'V',
-        16 => 'X',
-        17 => 'Y',
-        18 => 'Z',
+        4 => 'E',
+        5 => 'H',
+        6 => 'I',
+        7 => 'J',
+        8 => 'K',
+        9 => 'L',
+        10 => 'M',
+        11 => 'O',
+        12 => 'P',
+        13 => 'S',
+        14 => 'T',
+        15 => 'U',
+        16 => 'V',
+        17 => 'X',
+        18 => 'Y',
+        19 => 'Z',
         _ => '?',
     }
-}
-
-enum FittingMethod {
-    Kmeans,
-    FlossSelect,
 }
