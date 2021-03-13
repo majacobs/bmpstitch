@@ -162,7 +162,7 @@ pub fn get_dmc_floss() -> Vec<Floss<'static>> {
         Floss {
             number: "309",
             name: "Rose Dark",
-            color: Rgb::new(86, 74, 74),
+            color: Rgb::new(186, 74, 74),
         },
         Floss {
             number: "963",
