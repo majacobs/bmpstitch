@@ -112,12 +112,6 @@ impl Pixel {
             color: Rgb::new(*red, *green, *blue),
         })
     }
-
-    pub fn from(red: u8, green: u8, blue: u8) -> Self {
-        Pixel {
-            color: Rgb::new(red, green, blue),
-        }
-    }
 }
 
 fn expect<'a, I>(iter: &mut I, expected: u8) -> Result<(), String>

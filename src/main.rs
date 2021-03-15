@@ -7,9 +7,8 @@ mod floss;
 use crate::bitmap::{Bmp, Pixel};
 use crate::color::{Color, Hsl};
 use crate::floss::algorithm::reduce_to_known;
-use crate::floss::flosses::get_dmc_floss;
+use crate::floss::flosses::{get_dmc_floss, Floss};
 use crate::floss::rcv::vote;
-use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
@@ -33,9 +32,9 @@ fn main() {
     let bitmap_name = args[2].to_string();
     let output_name = args[3].to_string();
 
-    let mut bmp = Bmp::new(bitmap_name).unwrap();
-    reduce(num_colors, &mut bmp.pixels);
-    render(&bmp, output_name).unwrap();
+    let bmp = Bmp::new(bitmap_name).unwrap();
+    let (reduced, palette) = reduce(num_colors, &bmp.pixels);
+    render(reduced, palette, &bmp, output_name).unwrap();
 }
 
 fn print_usage() {
@@ -44,58 +43,58 @@ fn print_usage() {
 
 const USE_VOTING: bool = true;
 
-fn reduce(num_colors: usize, pixels: &mut Vec<Pixel>) {
+fn reduce(num_colors: usize, pixels: &Vec<Pixel>) -> (Vec<usize>, Vec<Floss>) {
     let pixel_parts: Vec<Hsl> = pixels.iter().map(|p| p.color.into()).collect();
     let all_floss = get_dmc_floss();
-    let chosen_floss = if USE_VOTING {
+    let palette = if USE_VOTING {
         vote(num_colors, &pixel_parts, all_floss)
     } else {
         reduce_to_known(num_colors, &pixel_parts, all_floss)
     };
-    let palette: Vec<_> = chosen_floss
-        .iter()
-        .map(|f| (f.color, Pixel::from(f.color.r, f.color.g, f.color.b)))
-        .collect();
 
-    for pixel in pixels.iter_mut() {
-        let mut replacement = Pixel::from(255, 0, 255);
-        let mut best_dist = std::f32::MAX;
-        let parts = &pixel.color;
+    let mut reduced = Vec::new();
+    for pixel in pixels.iter() {
+        let index_of_closest = palette
+            .iter()
+            .map(|floss| floss.color.dist(&pixel.color))
+            .enumerate()
+            .min_by(|(_, dist1), (_, dist2)| dist1.partial_cmp(dist2).unwrap())
+            .unwrap()
+            .0;
 
-        for (color, pixel) in palette.iter() {
-            let dist = color.dist(&parts);
-            if dist > best_dist {
-                continue;
-            }
-
-            best_dist = dist;
-            replacement = pixel.clone();
-        }
-
-        *pixel = replacement;
+        reduced.push(index_of_closest);
     }
+
+    (reduced, palette)
 }
 
-fn render(bmp: &Bmp, output_name: String) -> std::io::Result<()> {
-    let mut counts = HashMap::new();
-    for pixel in bmp.pixels.iter() {
-        *counts.entry(pixel).or_insert(0i32) += 1;
+fn render(
+    reduced: Vec<usize>,
+    palette: Vec<Floss>,
+    bmp: &Bmp,
+    output_name: String,
+) -> std::io::Result<()> {
+    let mut counts: Vec<i32> = palette.iter().map(|_| 0).collect();
+    for &palette_index in reduced.iter() {
+        counts[palette_index] += 1;
     }
 
-    let mut foo: Vec<_> = counts.iter().collect();
-    foo.sort_by_key(|&(_, count)| -count);
-
-    let map: HashMap<_, _> = foo
-        .iter()
-        .enumerate()
-        .map(|(i, &(p, &c))| (p, (i, c)))
-        .collect();
-
     let mut file = File::create(output_name)?;
-    file.write_fmt(format_args!("<html>
-<head>
-<title>Pattern</title>
-<style type=\"text/css\">
+    file.write_fmt(format_args!(
+        "<html><head><title>Pattern</title><style type=\"text/css\">"
+    ))?;
+    print_css(&mut file, &palette)?;
+    file.write_fmt(format_args!("</style></head><body>"))?;
+    print_display_table(&mut file, &bmp, &reduced)?;
+    print_palette(&mut file, &palette, counts)?;
+    print_printable_table(&mut file, &bmp, &reduced)?;
+    file.write_fmt(format_args!("</body></html>"))?;
+
+    Ok(())
+}
+
+fn print_css(file: &mut File, palette: &Vec<Floss>) -> std::io::Result<()> {
+    file.write_fmt(format_args!("
 html {{ font-size: 7pt; font-family: monospace; }}
 table {{ border-collapse: collapse; }}
 .display td {{ width: 0.4em; line-height: 0.4em; padding: 0; }}
@@ -107,7 +106,7 @@ table {{ border-collapse: collapse; }}
 .printable td:nth-child(10n+10) {{ border-right: 2px solid #000; }}
 .printable tr:first-child > td {{ border-top: 2px solid #000; }}
 .printable tr:nth-child(10n+10) > td {{ border-bottom: 2px solid #000; }}"))?;
-    for (p, (i, _)) in map.iter() {
+    for (i, floss) in palette.iter().enumerate() {
         file.write_fmt(format_args!(
             "
 
@@ -117,46 +116,35 @@ table.display .symbol-{0} {{ background-color: #{1:02x}{2:02x}{3:02x}; }}
 .printable .symbol-{0}::before,
 #palette .symbol-{0}::before {{ content: '{4}'; }}",
             i,
-            p.color.r,
-            p.color.g,
-            p.color.b,
-            symbol(*i)
+            floss.color.r,
+            floss.color.g,
+            floss.color.b,
+            symbol(i)
         ))?;
     }
     file.write_fmt(format_args!(
         "
 #palette {{ font-size: 3em; }}
-/*#palette::after {{ clear: both; display: table; content: ''; }}
-#palette > div {{ float: left; width: 4em; height: 2em; }}
-#palette > div:nth-child(6n) {{ clear: left; }}
-#palette > div * {{ vertical-align: top; }}*/
 #palette .color {{ width: 3em; height: 1.5em; display: inline-block; border: 1px solid #000; }}
-h2 {{ page-break-before: always; }}
-</style>
-</head>
-<body>"
+#palette td:nth-child(n+2) {{ padding-left: 0.5em; }}
+.stitch-count {{ text-align: right; }}
+h2 {{ page-break-before: always; }}"
     ))?;
-    print_display_table(&mut file, &bmp, &map)?;
-    print_palette(&mut file, &map)?;
-    print_printable_table(&mut file, &bmp, &map)?;
-    file.write_fmt(format_args!("</body></html>"))?;
 
     Ok(())
 }
 
-fn print_display_table(
-    file: &mut File,
-    bmp: &Bmp,
-    map: &HashMap<&&Pixel, (usize, i32)>,
-) -> std::io::Result<()> {
+fn print_display_table(file: &mut File, bmp: &Bmp, reduced: &Vec<usize>) -> std::io::Result<()> {
     file.write_fmt(format_args!("<table class=\"display\">\n"))?;
     let width = bmp.header.width as usize;
-    for (i, pixel) in bmp.pixels.iter().enumerate() {
+    for (i, palette_index) in reduced.iter().enumerate() {
         if i % width == 0 {
             file.write_fmt(format_args!("<tr>\n"))?;
         }
-        let color_index = map.get(&pixel).unwrap().0;
-        file.write_fmt(format_args!("<td class=\"symbol-{}\"></td>\n", color_index))?;
+        file.write_fmt(format_args!(
+            "<td class=\"symbol-{}\"></td>\n",
+            palette_index
+        ))?;
         if i % width + 1 == width {
             file.write_fmt(format_args!("</tr>\n"))?;
         }
@@ -166,22 +154,17 @@ fn print_display_table(
     Ok(())
 }
 
-fn print_palette(file: &mut File, map: &HashMap<&&Pixel, (usize, i32)>) -> std::io::Result<()> {
+fn print_palette(file: &mut File, palette: &Vec<Floss>, counts: Vec<i32>) -> std::io::Result<()> {
     file.write_fmt(format_args!(
         "
 <div id=\"palette\">
 <table>"
     ))?;
-    let all_floss = get_dmc_floss();
-    for (pixel, (i, count)) in map.iter() {
-        let name = if let Some(floss) = all_floss.iter().find(|&&f| f.color == pixel.color) {
-            format!("#{0} {1}", floss.number, floss.name)
-        } else {
-            pixel.color.name()
-        };
+    for (i, (floss, count)) in palette.iter().zip(counts.iter()).enumerate() {
+        let name = format!("#{0} {1}", floss.number, floss.name);
 
         file.write_fmt(format_args!("
-<tr><td><span class=\"color color-{0}\"></span></td><td><span class=\"symbol-{0}\"></span></td><td>{1}</td><td>{2}</td></tr>",
+<tr><td><span class=\"color color-{0}\"></span></td><td><span class=\"symbol-{0}\"></span></td><td>{1}</td><td class=\"stitch-count\">{2}</td></tr>",
             i, name, count
             ))?;
     }
@@ -191,11 +174,7 @@ fn print_palette(file: &mut File, map: &HashMap<&&Pixel, (usize, i32)>) -> std::
     Ok(())
 }
 
-fn print_printable_table(
-    file: &mut File,
-    bmp: &Bmp,
-    map: &HashMap<&&Pixel, (usize, i32)>,
-) -> std::io::Result<()> {
+fn print_printable_table(file: &mut File, bmp: &Bmp, reduced: &Vec<usize>) -> std::io::Result<()> {
     const BLOCK_SIZE: usize = 40;
     let width = bmp.header.width as usize;
     let x_block_count = ((bmp.header.width as f32) / (BLOCK_SIZE as f32)).ceil() as usize;
@@ -203,8 +182,7 @@ fn print_printable_table(
 
     for y_block in 0..y_block_count {
         for x_block in 0..x_block_count {
-            let block = bmp
-                .pixels
+            let block = reduced
                 .chunks(width)
                 .skip(y_block * BLOCK_SIZE)
                 .take(BLOCK_SIZE)
@@ -214,8 +192,7 @@ fn print_printable_table(
             file.write_fmt(format_args!("<table class=\"printable\">\n"))?;
             for row in block {
                 file.write_fmt(format_args!("<tr>\n"))?;
-                for pixel in row {
-                    let color_index = map.get(&pixel).unwrap().0;
+                for color_index in row {
                     file.write_fmt(format_args!("<td class=\"symbol-{}\"></td>\n", color_index))?;
                 }
                 file.write_fmt(format_args!("</tr>\n"))?;
