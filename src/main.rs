@@ -46,11 +46,13 @@ const USE_VOTING: bool = true;
 fn reduce(num_colors: usize, pixels: &Vec<Pixel>) -> (Vec<Option<usize>>, Vec<Floss>) {
     let pixel_parts: Vec<Hsl> = pixels.iter().map(|p| p.color.into()).collect();
     let all_floss = get_dmc_floss();
-    let palette = if USE_VOTING {
+    let mut palette = if USE_VOTING {
         vote(num_colors, &pixel_parts, all_floss)
     } else {
         reduce_to_known(num_colors, &pixel_parts, all_floss)
     };
+
+    palette.sort_by_cached_key(|floss| floss.number.parse::<i32>().ok());
 
     let mut reduced = Vec::new();
     for pixel in pixels.iter() {
