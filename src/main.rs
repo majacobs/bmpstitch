@@ -43,7 +43,7 @@ fn print_usage() {
 
 const USE_VOTING: bool = true;
 
-fn reduce(num_colors: usize, pixels: &Vec<Pixel>) -> (Vec<usize>, Vec<Floss>) {
+fn reduce(num_colors: usize, pixels: &Vec<Pixel>) -> (Vec<Option<usize>>, Vec<Floss>) {
     let pixel_parts: Vec<Hsl> = pixels.iter().map(|p| p.color.into()).collect();
     let all_floss = get_dmc_floss();
     let palette = if USE_VOTING {
@@ -54,6 +54,11 @@ fn reduce(num_colors: usize, pixels: &Vec<Pixel>) -> (Vec<usize>, Vec<Floss>) {
 
     let mut reduced = Vec::new();
     for pixel in pixels.iter() {
+        if pixel.alpha < 128u8 {
+            reduced.push(None);
+            continue;
+        }
+
         let index_of_closest = palette
             .iter()
             .map(|floss| floss.color.dist(&pixel.color))
@@ -62,21 +67,23 @@ fn reduce(num_colors: usize, pixels: &Vec<Pixel>) -> (Vec<usize>, Vec<Floss>) {
             .unwrap()
             .0;
 
-        reduced.push(index_of_closest);
+        reduced.push(Some(index_of_closest));
     }
 
     (reduced, palette)
 }
 
 fn render(
-    reduced: Vec<usize>,
+    reduced: Vec<Option<usize>>,
     palette: Vec<Floss>,
     bmp: &Bmp,
     output_name: String,
 ) -> std::io::Result<()> {
     let mut counts: Vec<i32> = palette.iter().map(|_| 0).collect();
     for &palette_index in reduced.iter() {
-        counts[palette_index] += 1;
+        if let Some(index) = palette_index {
+            counts[index] += 1;
+        }
     }
 
     let mut file = File::create(output_name)?;
@@ -134,17 +141,22 @@ h2 {{ page-break-before: always; }}"
     Ok(())
 }
 
-fn print_display_table(file: &mut File, bmp: &Bmp, reduced: &Vec<usize>) -> std::io::Result<()> {
+fn print_display_table(
+    file: &mut File,
+    bmp: &Bmp,
+    reduced: &Vec<Option<usize>>,
+) -> std::io::Result<()> {
     file.write_fmt(format_args!("<table class=\"display\">\n"))?;
     let width = bmp.header.width as usize;
     for (i, palette_index) in reduced.iter().enumerate() {
         if i % width == 0 {
             file.write_fmt(format_args!("<tr>\n"))?;
         }
-        file.write_fmt(format_args!(
-            "<td class=\"symbol-{}\"></td>\n",
-            palette_index
-        ))?;
+        if let Some(index) = palette_index {
+            file.write_fmt(format_args!("<td class=\"symbol-{}\"></td>\n", index))?;
+        } else {
+            file.write_fmt(format_args!("<td></td>\n",))?;
+        }
         if i % width + 1 == width {
             file.write_fmt(format_args!("</tr>\n"))?;
         }
@@ -174,7 +186,11 @@ fn print_palette(file: &mut File, palette: &Vec<Floss>, counts: Vec<i32>) -> std
     Ok(())
 }
 
-fn print_printable_table(file: &mut File, bmp: &Bmp, reduced: &Vec<usize>) -> std::io::Result<()> {
+fn print_printable_table(
+    file: &mut File,
+    bmp: &Bmp,
+    reduced: &Vec<Option<usize>>,
+) -> std::io::Result<()> {
     const BLOCK_SIZE: usize = 40;
     let width = bmp.header.width as usize;
     let x_block_count = ((bmp.header.width as f32) / (BLOCK_SIZE as f32)).ceil() as usize;
@@ -193,7 +209,11 @@ fn print_printable_table(file: &mut File, bmp: &Bmp, reduced: &Vec<usize>) -> st
             for row in block {
                 file.write_fmt(format_args!("<tr>\n"))?;
                 for color_index in row {
-                    file.write_fmt(format_args!("<td class=\"symbol-{}\"></td>\n", color_index))?;
+                    if let Some(index) = color_index {
+                        file.write_fmt(format_args!("<td class=\"symbol-{}\"></td>\n", index))?;
+                    } else {
+                        file.write_fmt(format_args!("<td></td>\n"))?;
+                    }
                 }
                 file.write_fmt(format_args!("</tr>\n"))?;
             }

@@ -16,6 +16,7 @@ pub struct Header {
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Pixel {
     pub color: Rgb,
+    pub alpha: u8,
 }
 
 impl Bmp {
@@ -100,16 +101,19 @@ impl Pixel {
             return Err("bpp");
         }
 
-        let blue = iter.next().ok_or("Blue")?;
-        let green = iter.next().ok_or("Green")?;
-        let red = iter.next().ok_or("Red")?;
+        let blue = *iter.next().ok_or("Blue")?;
+        let green = *iter.next().ok_or("Green")?;
+        let red = *iter.next().ok_or("Red")?;
 
-        if bits_per_pixel == 32 {
-            iter.next().ok_or("Extra")?;
-        }
+        let alpha = if bits_per_pixel == 32 {
+            *iter.next().ok_or("Alpha")?
+        } else {
+            255u8
+        };
 
         Ok(Pixel {
-            color: Rgb::new(*red, *green, *blue),
+            color: Rgb::new(red, green, blue),
+            alpha: alpha,
         })
     }
 }
