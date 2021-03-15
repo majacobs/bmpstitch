@@ -87,21 +87,22 @@ fn render(
     }
 
     let mut file = File::create(output_name)?;
-    file.write_fmt(format_args!(
+    write!(
+        file,
         "<html><head><title>Pattern</title><style type=\"text/css\">"
-    ))?;
+    )?;
     print_css(&mut file, &palette)?;
-    file.write_fmt(format_args!("</style></head><body>"))?;
+    write!(file, "</style></head><body>")?;
     print_display_table(&mut file, &bmp, &reduced)?;
     print_palette(&mut file, &palette, counts)?;
     print_printable_table(&mut file, &bmp, &reduced)?;
-    file.write_fmt(format_args!("</body></html>"))?;
+    write!(file, "</body></html>")?;
 
     Ok(())
 }
 
 fn print_css(file: &mut File, palette: &Vec<Floss>) -> std::io::Result<()> {
-    file.write_fmt(format_args!("
+    write!(file, "
 html {{ font-size: 7pt; font-family: monospace; }}
 table {{ border-collapse: collapse; }}
 .display td {{ width: 0.4em; line-height: 0.4em; padding: 0; }}
@@ -112,9 +113,10 @@ table {{ border-collapse: collapse; }}
 .printable td:first-child {{ border-left: 2px solid #000; }}
 .printable td:nth-child(10n+10) {{ border-right: 2px solid #000; }}
 .printable tr:first-child > td {{ border-top: 2px solid #000; }}
-.printable tr:nth-child(10n+10) > td {{ border-bottom: 2px solid #000; }}"))?;
+.printable tr:nth-child(10n+10) > td {{ border-bottom: 2px solid #000; }}")?;
     for (i, floss) in palette.iter().enumerate() {
-        file.write_fmt(format_args!(
+        write!(
+            file,
             "
 
 .color-{0} {{ background-color: #{1:02x}{2:02x}{3:02x}; }}
@@ -127,16 +129,17 @@ table.display .symbol-{0} {{ background-color: #{1:02x}{2:02x}{3:02x}; }}
             floss.color.g,
             floss.color.b,
             symbol(i)
-        ))?;
+        )?;
     }
-    file.write_fmt(format_args!(
+    write!(
+        file,
         "
 #palette {{ font-size: 3em; }}
 #palette .color {{ width: 3em; height: 1.5em; display: inline-block; border: 1px solid #000; }}
 #palette td:nth-child(n+2) {{ padding-left: 0.5em; }}
 .stitch-count {{ text-align: right; }}
 h2 {{ page-break-before: always; }}"
-    ))?;
+    )?;
 
     Ok(())
 }
@@ -146,42 +149,43 @@ fn print_display_table(
     bmp: &Bmp,
     reduced: &Vec<Option<usize>>,
 ) -> std::io::Result<()> {
-    file.write_fmt(format_args!("<table class=\"display\">\n"))?;
+    writeln!(file, "<table class=\"display\">")?;
     let width = bmp.header.width as usize;
     for (i, palette_index) in reduced.iter().enumerate() {
         if i % width == 0 {
-            file.write_fmt(format_args!("<tr>\n"))?;
+            writeln!(file, "<tr>")?;
         }
         if let Some(index) = palette_index {
-            file.write_fmt(format_args!("<td class=\"symbol-{}\"></td>\n", index))?;
+            writeln!(file, "<td class=\"symbol-{}\"></td>", index)?;
         } else {
-            file.write_fmt(format_args!("<td></td>\n",))?;
+            writeln!(file, "<td></td>")?;
         }
         if i % width + 1 == width {
-            file.write_fmt(format_args!("</tr>\n"))?;
+            writeln!(file, "</tr>")?;
         }
     }
-    file.write_fmt(format_args!("</table>"))?;
+    write!(file, "</table>")?;
 
     Ok(())
 }
 
 fn print_palette(file: &mut File, palette: &Vec<Floss>, counts: Vec<i32>) -> std::io::Result<()> {
-    file.write_fmt(format_args!(
+    write!(
+        file,
         "
 <div id=\"palette\">
 <table>"
-    ))?;
+    )?;
     for (i, (floss, count)) in palette.iter().zip(counts.iter()).enumerate() {
         let name = format!("#{0} {1}", floss.number, floss.name);
 
-        file.write_fmt(format_args!("
+        write!(file, "
 <tr><td><span class=\"color color-{0}\"></span></td><td><span class=\"symbol-{0}\"></span></td><td>{1}</td><td class=\"stitch-count\">{2}</td></tr>",
             i, name, count
-            ))?;
+            )?;
     }
 
-    file.write_fmt(format_args!("</table></div>"))?;
+    write!(file, "</table></div>")?;
 
     Ok(())
 }
@@ -204,20 +208,20 @@ fn print_printable_table(
                 .take(BLOCK_SIZE)
                 .map(|c| c.iter().skip(x_block * BLOCK_SIZE).take(BLOCK_SIZE));
 
-            file.write_fmt(format_args!("<h2>Block {},{}</h2>\n", x_block, y_block))?;
-            file.write_fmt(format_args!("<table class=\"printable\">\n"))?;
+            writeln!(file, "<h2>Block {},{}</h2>", x_block, y_block)?;
+            writeln!(file, "<table class=\"printable\">")?;
             for row in block {
-                file.write_fmt(format_args!("<tr>\n"))?;
+                writeln!(file, "<tr>")?;
                 for color_index in row {
                     if let Some(index) = color_index {
-                        file.write_fmt(format_args!("<td class=\"symbol-{}\"></td>\n", index))?;
+                        writeln!(file, "<td class=\"symbol-{}\"></td>", index)?;
                     } else {
-                        file.write_fmt(format_args!("<td></td>\n"))?;
+                        writeln!(file, "<td></td>")?;
                     }
                 }
-                file.write_fmt(format_args!("</tr>\n"))?;
+                writeln!(file, "</tr>")?;
             }
-            file.write_fmt(format_args!("</table>\n"))?;
+            writeln!(file, "</table>")?;
         }
     }
 
