@@ -1,6 +1,7 @@
 use std::cmp::PartialEq;
 use std::convert::From;
 use std::hash::Hash;
+use std::marker::PhantomData;
 
 pub trait Color: Copy + Clone {
     fn dist(&self, other: &Self) -> f32;
@@ -20,6 +21,57 @@ pub struct Hsl {
     pub s: f32,
     pub l: f32,
 }
+
+pub trait Illuminant: Copy {
+    const SRGB_TO_XYZ_MATRIX: [[f32; 3]; 3];
+    const XYZ_TO_SRGB_MATRIX: [[f32; 3]; 3];
+    const TRISTIMULUS_X: f32;
+    const TRISTIMULUS_Y: f32;
+    const TRISTIMULUS_Z: f32;
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct IlluminantD65;
+
+impl Illuminant for IlluminantD65 {
+    const SRGB_TO_XYZ_MATRIX: [[f32; 3]; 3] = [
+        [0.41239080, 0.35758434, 0.18048079],
+        [0.21263901, 0.71516868, 0.07219232],
+        [0.01933082, 0.11919478, 0.95053215],
+    ];
+
+    const XYZ_TO_SRGB_MATRIX: [[f32; 3]; 3] = [
+        [3.24096994, -1.53738318, -0.49861076],
+        [-0.96924364, 1.87596750, 0.04155506],
+        [0.05563008, -0.20397696, 1.05697151],
+    ];
+
+    const TRISTIMULUS_X: f32 = 0.95047;
+
+    const TRISTIMULUS_Y: f32 = 1.0;
+
+    const TRISTIMULUS_Z: f32 = 1.08883;
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct CieXyz<I: Illuminant> {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    phantom: PhantomData<I>,
+}
+
+pub type CieXyzD65 = CieXyz<IlluminantD65>;
+
+#[derive(Debug, Copy, Clone)]
+pub struct CieLuv<I: Illuminant> {
+    pub l: f32,
+    pub u: f32,
+    pub v: f32,
+    phantom: PhantomData<I>,
+}
+
+pub type CieLuvD65 = CieXyz<IlluminantD65>;
 
 impl Rgb {
     pub fn new(r: u8, g: u8, b: u8) -> Self {
@@ -73,6 +125,26 @@ impl From<Hsl> for Rgb {
             g: g as u8,
             b: b as u8,
         }
+    }
+}
+
+impl<I: Illuminant> From<CieXyz<I>> for Rgb {
+    fn from(item: CieXyz<I>) -> Rgb {
+        let matrix = I::XYZ_TO_SRGB_MATRIX;
+        let r_linear = matrix[0][0] * item.x + matrix[0][1] * item.y + matrix[0][2] * item.z;
+        let g_linear = matrix[1][0] * item.x + matrix[1][1] * item.y + matrix[1][2] * item.z;
+        let b_linear = matrix[2][0] * item.x + matrix[2][1] * item.y + matrix[2][2] * item.z;
+
+        Rgb {
+            r: (gamma(r_linear) * 255.0).round() as u8,
+            g: (gamma(g_linear) * 255.0).round() as u8,
+            b: (gamma(b_linear) * 255.0).round() as u8,
+        }
+    }
+}
+impl<I: Illuminant> From<CieLuv<I>> for Rgb {
+    fn from(item: CieLuv<I>) -> Rgb {
+        CieXyz::from(item).into()
     }
 }
 
@@ -158,6 +230,155 @@ impl Color for Hsl {
     }
 }
 
+impl<I: Illuminant> CieXyz<I> {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        CieXyz {
+            x: x,
+            y: y,
+            z: z,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<I: Illuminant> PartialEq for CieXyz<I> {
+    fn eq(&self, other: &Self) -> bool {
+        self.x == other.x && self.y == other.y && self.z == other.z
+    }
+}
+
+impl<I: Illuminant> Eq for CieXyz<I> {}
+
+impl<I: Illuminant> Color for CieXyz<I> {
+    fn dist(&self, other: &Self) -> f32 {
+        let dx = self.x - other.x;
+        let dy = self.y - other.y;
+        let dz = self.z - other.z;
+
+        (dx.powi(2) + dy.powi(2) + dz.powi(2)).sqrt()
+    }
+
+    fn name(&self) -> String {
+        unimplemented!();
+    }
+}
+
+impl<I: Illuminant> From<Rgb> for CieXyz<I> {
+    fn from(item: Rgb) -> CieXyz<I> {
+        let r_linear = inv_gamma(item.r as f32 / 255.0);
+        let g_linear = inv_gamma(item.g as f32 / 255.0);
+        let b_linear = inv_gamma(item.b as f32 / 255.0);
+
+        let matrix = I::SRGB_TO_XYZ_MATRIX;
+        CieXyz {
+            x: matrix[0][0] * r_linear + matrix[0][1] * g_linear + matrix[0][2] * b_linear,
+            y: matrix[1][0] * r_linear + matrix[1][1] * g_linear + matrix[1][2] * b_linear,
+            z: matrix[2][0] * r_linear + matrix[2][1] * g_linear + matrix[2][2] * b_linear,
+            phantom: PhantomData,
+        }
+    }
+}
+impl<I: Illuminant> CieLuv<I> {
+    pub fn new(l: f32, u: f32, v: f32) -> Self {
+        CieLuv {
+            l: l,
+            u: u,
+            v: v,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<I: Illuminant> PartialEq for CieLuv<I> {
+    fn eq(&self, other: &Self) -> bool {
+        self.l == other.l && self.u == other.u && self.v == other.v
+    }
+}
+
+impl<I: Illuminant> Eq for CieLuv<I> {}
+
+impl<I: Illuminant> Color for CieLuv<I> {
+    fn dist(&self, other: &Self) -> f32 {
+        let dl = self.l - other.l;
+        let du = self.u - other.u;
+        let dv = self.v - other.v;
+
+        (dl.powi(2) + du.powi(2) + dv.powi(2)).sqrt()
+    }
+
+    fn name(&self) -> String {
+        unimplemented!();
+    }
+}
+
+impl<I: Illuminant> From<CieXyz<I>> for CieLuv<I> {
+    fn from(item: CieXyz<I>) -> CieLuv<I> {
+        fn u(x:f32, y:f32, z:f32) -> f32 { 4.0 * x / (x + 15.0 * y + 3.0 * z)}
+        fn v(x:f32, y:f32, z:f32) -> f32 { 9.0 * y / (x + 15.0 * y + 3.0 * z)}
+
+        const EPISILON: f32 = 216.0 / 24389.0;
+        const KAPPA: f32 = 24389.0 / 27.0;
+
+        let u_prime = u(item.x, item.y, item.z);
+        let v_prime = v(item.x, item.y, item.z);
+        let u_prime_r = u(I::TRISTIMULUS_X, I::TRISTIMULUS_Y, I::TRISTIMULUS_Z);
+        let v_prime_r = v(I::TRISTIMULUS_X, I::TRISTIMULUS_Y, I::TRISTIMULUS_Z);
+
+        let y_r = item.y / I::TRISTIMULUS_Y;
+
+        let l = if y_r > EPISILON {
+            116.0 * y_r.cbrt() - 16.0
+        } else {
+            KAPPA * y_r
+        };
+
+        CieLuv {
+            l: l,
+            u: 13.0 * l * (u_prime - u_prime_r),
+            v: 13.0 * l * (v_prime - v_prime_r),
+            phantom: PhantomData,
+        }
+    }
+}
+impl<I: Illuminant> From<CieLuv<I>> for CieXyz<I> {
+    fn from(item: CieLuv<I>) -> CieXyz<I> {
+        fn u(x:f32, y:f32, z:f32) -> f32 { 4.0 * x / (x + 15.0 * y + 3.0 * z)}
+        fn v(x:f32, y:f32, z:f32) -> f32 { 9.0 * y / (x + 15.0 * y + 3.0 * z)}
+
+        const EPSILON: f32 = 216.0 / 24389.0;
+        const KAPPA: f32 = 24389.0 / 27.0;
+
+        let u_0 = u(I::TRISTIMULUS_X, I::TRISTIMULUS_Y, I::TRISTIMULUS_Z);
+        let v_0 = v(I::TRISTIMULUS_X, I::TRISTIMULUS_Y, I::TRISTIMULUS_Z);
+
+        let y = if item.l > KAPPA * EPSILON {
+            ((item.l + 16.0) / 116.0).powi(3)
+        } else {
+            item.l / KAPPA
+        };
+
+        let a = (52.0 * item.l / (item.u + 13.0 * item.l * u_0) - 1.0) / 3.0;
+        let b = -5.0 * y;
+        let c = -1.0 / 3.0;
+        let d = y * (39.0 * item.l / (item.v + 13.0 * item.l * v_0) - 5.0);
+
+        let x = (d - b) / (a - c);
+
+        CieXyz {
+            x: x,
+            y: y,
+            z: x * a + b,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<I: Illuminant> From<Rgb> for CieLuv<I> {
+    fn from(item: Rgb) -> CieLuv<I> {
+        CieXyz::from(item).into()
+    }
+}
+
 fn max_and_min<T>(r: T, g: T, b: T) -> (T, T)
 where
     T: PartialOrd,
@@ -181,9 +402,33 @@ where
     }
 }
 
+fn gamma(u: f32) -> f32 {
+    if u <= 0.0031308 {
+        12.92 * u
+    } else {
+        1.055 * u.powf(1.0 / 2.4) - 0.055
+    }
+}
+
+fn inv_gamma(u: f32) -> f32 {
+    if u <= 0.04045 {
+        u / 12.92
+    } else {
+        ((u + 0.055) / 1.055).powf(2.4)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    macro_rules! assert_delta {
+        ($x:expr, $y:expr, $d:expr) => {
+            if ($x - $y).abs() > $d {
+                panic!("failed {} \u{2248} {} within {}", $x, $y, $d);
+            }
+        };
+    }
 
     #[test]
     fn max_and_min_123() {
@@ -287,5 +532,111 @@ mod tests {
     fn hsl_to_rgb_ea38b9() {
         let rgb: Rgb = Hsl::new(316.5, 0.809, 0.569).into();
         assert_eq!(rgb, Rgb::from_hex(0xEA38B9));
+    }
+
+    #[test]
+    fn rgb_to_ciexyz_000000() {
+        let xyz: CieXyz<IlluminantD65> = Rgb::from_hex(0x000000).into();
+        assert_eq!(xyz, CieXyz::new(0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn rgb_to_ciexyz_ffffff() {
+        let xyz: CieXyz<IlluminantD65> = Rgb::from_hex(0xFFFFFF).into();
+        assert_delta!(xyz.x, 0.95047, 0.001);
+        assert_delta!(xyz.y, 1.00000, 0.001);
+        assert_delta!(xyz.z, 1.08883, 0.001);
+    }
+
+    #[test]
+    fn rgb_to_ciexyz_ff0000() {
+        let xyz: CieXyz<IlluminantD65> = Rgb::from_hex(0xFF0000).into();
+        assert_delta!(xyz.x, 0.41246, 0.001);
+        assert_delta!(xyz.y, 0.21267, 0.001);
+        assert_delta!(xyz.z, 0.01933, 0.001);
+    }
+
+    #[test]
+    fn rgb_to_ciexyz_00ff00() {
+        let xyz: CieXyz<IlluminantD65> = Rgb::from_hex(0x00FF00).into();
+        assert_delta!(xyz.x, 0.35758, 0.001);
+        assert_delta!(xyz.y, 0.71515, 0.001);
+        assert_delta!(xyz.z, 0.11919, 0.001);
+    }
+
+    #[test]
+    fn rgb_to_ciexyz_0000ff() {
+        let xyz: CieXyz<IlluminantD65> = Rgb::from_hex(0x0000FF).into();
+        assert_delta!(xyz.x, 0.18044, 0.001);
+        assert_delta!(xyz.y, 0.07217, 0.001);
+        assert_delta!(xyz.z, 0.95030, 0.001);
+    }
+
+    #[test]
+    fn rgb_to_ciexyz_ea38b9() {
+        let xyz: CieXyz<IlluminantD65> = Rgb::from_hex(0xEA38B9).into();
+        assert_delta!(xyz.x, 0.44104, 0.001);
+        assert_delta!(xyz.y, 0.23828, 0.001);
+        assert_delta!(xyz.z, 0.48166, 0.001);
+    }
+
+    #[test]
+    fn ciexyz_to_rgb_000000() {
+        let rgb: Rgb = CieXyz::<IlluminantD65>::new(0.0, 0.0, 0.0).into();
+        assert_eq!(rgb, Rgb::from_hex(0x000000));
+    }
+
+    #[test]
+    fn ciexyz_to_rgb_ffffff() {
+        let rgb: Rgb = CieXyz::<IlluminantD65>::new(0.95047, 1.00000, 1.08883).into();
+        assert_eq!(rgb, Rgb::from_hex(0xFFFFFF));
+    }
+
+    #[test]
+    fn ciexyz_to_rgb_ff0000() {
+        let rgb: Rgb = CieXyz::<IlluminantD65>::new(0.41246, 0.21267, 0.01933).into();
+        assert_eq!(rgb, Rgb::from_hex(0xFF0000));
+    }
+
+    #[test]
+    fn ciexyz_to_rgb_00ff00() {
+        let rgb: Rgb = CieXyz::<IlluminantD65>::new(0.35758, 0.71515, 0.11919).into();
+        assert_eq!(rgb, Rgb::from_hex(0x00FF00));
+    }
+
+    #[test]
+    fn ciexyz_to_rgb_0000ff() {
+        let rgb: Rgb = CieXyz::<IlluminantD65>::new(0.18044, 0.07217, 0.95030).into();
+        assert_eq!(rgb, Rgb::from_hex(0x0000FF));
+    }
+
+    #[test]
+    fn ciexyz_to_rgb_ea38b9() {
+        let rgb: Rgb = CieXyz::<IlluminantD65>::new(0.44104, 0.23828, 0.48166).into();
+        assert_eq!(rgb, Rgb::from_hex(0xEA38B9));
+    }
+
+    #[test]
+    fn rgb_to_ciexyz_to_rgb_ea38b9() {
+        let original = Rgb::from_hex(0xEA38B9);
+        let round_trip: Rgb = CieXyz::<IlluminantD65>::from(original.clone()).into();
+        assert_eq!(original, round_trip);
+    }
+
+    #[test]
+    fn ciexyz_to_cieluv() {
+        let luv: CieLuv<IlluminantD65> = CieXyz::new(0.44104, 0.23828, 0.48166).into();
+        assert_delta!(luv.l, 55.915, 0.001);
+        assert_delta!(luv.u, 91.047, 0.001);
+        assert_delta!(luv.v, -54.941, 0.001);
+    }
+
+    #[test]
+    fn ciexyz_to_cieluv_to_ciexyz() {
+        let original = CieXyz::<IlluminantD65>::new(0.44104, 0.23828, 0.48166);
+        let round_trip: CieXyz<_> = CieLuv::from(original.clone()).into();
+        assert_delta!(original.x, round_trip.x, 0.001);
+        assert_delta!(original.y, round_trip.y, 0.001);
+        assert_delta!(original.z, round_trip.z, 0.001);
     }
 }

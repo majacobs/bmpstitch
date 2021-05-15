@@ -5,7 +5,7 @@ mod color;
 mod floss;
 
 use crate::bitmap::{Bmp, Pixel};
-use crate::color::{Color, Hsl};
+use crate::color::{Color, Rgb, Hsl, CieXyzD65, CieLuvD65};
 use crate::floss::algorithm::reduce_to_known;
 use crate::floss::flosses::{get_dmc_floss, Floss};
 use crate::floss::rcv::vote;
@@ -33,7 +33,7 @@ fn main() {
     let output_name = args[3].to_string();
 
     let bmp = Bmp::new(bitmap_name).unwrap();
-    let (reduced, palette) = reduce(num_colors, &bmp.pixels);
+    let (reduced, palette) = reduce::<Rgb>(num_colors, &bmp.pixels);
     render(reduced, palette, &bmp, output_name).unwrap();
 }
 
@@ -43,8 +43,8 @@ fn print_usage() {
 
 const USE_VOTING: bool = true;
 
-fn reduce(num_colors: usize, pixels: &Vec<Pixel>) -> (Vec<Option<usize>>, Vec<Floss>) {
-    let pixel_parts: Vec<Hsl> = pixels.iter().map(|p| p.color.into()).collect();
+fn reduce<C: Color + From<Rgb>>(num_colors: usize, pixels: &Vec<Pixel>) -> (Vec<Option<usize>>, Vec<Floss>) {
+    let pixel_parts: Vec<C> = pixels.iter().map(|p| p.color.into()).collect();
     let all_floss = get_dmc_floss();
     let mut palette = if USE_VOTING {
         vote(num_colors, &pixel_parts, all_floss)
@@ -61,9 +61,12 @@ fn reduce(num_colors: usize, pixels: &Vec<Pixel>) -> (Vec<Option<usize>>, Vec<Fl
             continue;
         }
 
+        let color_luv: C = pixel.color.into();
+
         let index_of_closest = palette
             .iter()
-            .map(|floss| floss.color.dist(&pixel.color))
+            //.map(|floss| floss.color.dist(&pixel.color))
+            .map(|floss| C::from(floss.color).dist(&color_luv))
             .enumerate()
             .min_by(|(_, dist1), (_, dist2)| dist1.partial_cmp(dist2).unwrap())
             .unwrap()
@@ -237,21 +240,27 @@ fn symbol(n: usize) -> char {
         2 => 'C',
         3 => 'D',
         4 => 'E',
-        5 => 'H',
-        6 => 'I',
-        7 => 'J',
-        8 => 'K',
-        9 => 'L',
-        10 => 'M',
-        11 => 'O',
-        12 => 'P',
-        13 => 'S',
-        14 => 'T',
-        15 => 'U',
-        16 => 'V',
-        17 => 'X',
-        18 => 'Y',
-        19 => 'Z',
+        5 => 'F',
+        6 => 'G',
+        7 => 'H',
+        8 => 'I',
+        9 => 'J',
+        10 => 'K',
+        11 => 'L',
+        12 => 'M',
+        13 => 'N',
+        14 => 'O',
+        15 => 'P',
+        16 => 'Q',
+        17 => 'R',
+        18 => 'S',
+        19 => 'T',
+        20 => 'U',
+        21 => 'V',
+        22 => 'W',
+        23 => 'X',
+        24 => 'Y',
+        25 => 'Z',
         _ => '?',
     }
 }
