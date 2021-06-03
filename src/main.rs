@@ -1,12 +1,12 @@
 extern crate rand;
+extern crate rayon;
 
 mod bitmap;
 mod color;
 mod floss;
 
 use crate::bitmap::{Bmp, Pixel};
-use crate::color::{Color, Rgb, Hsl, CieXyzD65, CieLuvD65};
-use crate::floss::algorithm::reduce_to_known;
+use crate::color::{Color, Rgb, RgbLinear};
 use crate::floss::flosses::{get_dmc_floss, Floss};
 use crate::floss::rcv::vote;
 use std::env;
@@ -33,7 +33,7 @@ fn main() {
     let output_name = args[3].to_string();
 
     let bmp = Bmp::new(bitmap_name).unwrap();
-    let (reduced, palette) = reduce::<Rgb>(num_colors, &bmp.pixels);
+    let (reduced, palette) = reduce::<RgbLinear>(num_colors, &bmp.pixels);
     render(reduced, palette, &bmp, output_name).unwrap();
 }
 
@@ -41,16 +41,13 @@ fn print_usage() {
     println!("<color count> <input bitmap> <output html>");
 }
 
-const USE_VOTING: bool = true;
-
-fn reduce<C: Color + From<Rgb>>(num_colors: usize, pixels: &Vec<Pixel>) -> (Vec<Option<usize>>, Vec<Floss>) {
+fn reduce<C>(num_colors: usize, pixels: &Vec<Pixel>) -> (Vec<Option<usize>>, Vec<Floss>)
+where
+    C: Color + From<Rgb> + Sync + Send + 'static,
+{
     let pixel_parts: Vec<C> = pixels.iter().map(|p| p.color.into()).collect();
     let all_floss = get_dmc_floss();
-    let mut palette = if USE_VOTING {
-        vote(num_colors, &pixel_parts, all_floss)
-    } else {
-        reduce_to_known(num_colors, &pixel_parts, all_floss)
-    };
+    let mut palette = vote(num_colors, &pixel_parts, all_floss);
 
     palette.sort_by_cached_key(|floss| floss.number.parse::<i32>().ok());
 
@@ -65,7 +62,6 @@ fn reduce<C: Color + From<Rgb>>(num_colors: usize, pixels: &Vec<Pixel>) -> (Vec<
 
         let index_of_closest = palette
             .iter()
-            //.map(|floss| floss.color.dist(&pixel.color))
             .map(|floss| C::from(floss.color).dist(&color_luv))
             .enumerate()
             .min_by(|(_, dist1), (_, dist2)| dist1.partial_cmp(dist2).unwrap())
