@@ -158,7 +158,9 @@ fn read_pixels<'a, I>(iter: &mut I, header: &Header) -> Result<Vec<Pixel>, &'sta
 where
     I: Iterator<Item = &'a u8>,
 {
-    let row_padding = (header.width * (header.bits_per_pixel as u32) / 8) % 4;
+    const BYTE_ALIGNMENT: u32 = 4;
+    let pixel_padding = BYTE_ALIGNMENT - header.bits_per_pixel as u32 / 8;
+    let row_padding = (pixel_padding * header.width) % BYTE_ALIGNMENT;
 
     let mut rows = Vec::with_capacity(header.height as usize);
     for _ in 0..header.height {
