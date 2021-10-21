@@ -13,7 +13,7 @@ pub struct Header {
     bits_per_pixel: u16,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone)]
 pub struct Pixel {
     pub color: Rgb,
     pub alpha: u8,
@@ -39,10 +39,7 @@ impl Bmp {
         let mut body = bytes.iter().skip(offset as usize);
         let pixels = read_pixels(&mut body, &header)?;
 
-        Ok(Bmp {
-            header: header,
-            pixels: pixels,
-        })
+        Ok(Bmp { header, pixels })
     }
 }
 
@@ -70,9 +67,9 @@ impl Header {
         read_u16(iter)?; // Color planes
         let bits_per_pixel = read_u16(iter)?;
         Ok(Header {
-            width: width,
-            height: height,
-            bits_per_pixel: bits_per_pixel,
+            width,
+            height,
+            bits_per_pixel,
         })
     }
 
@@ -85,9 +82,9 @@ impl Header {
         read_u16(iter)?; // Color planes
         let bits_per_pixel = read_u16(iter)?;
         Ok(Header {
-            width: width,
-            height: height,
-            bits_per_pixel: bits_per_pixel,
+            width,
+            height,
+            bits_per_pixel,
         })
     }
 }
@@ -113,7 +110,7 @@ impl Pixel {
 
         Ok(Pixel {
             color: Rgb::new(red, green, blue),
-            alpha: alpha,
+            alpha,
         })
     }
 }

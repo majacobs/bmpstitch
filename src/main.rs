@@ -43,7 +43,7 @@ fn print_usage() {
     println!("<color count> <input bitmap> <output html>");
 }
 
-fn reduce<C>(num_colors: usize, pixels: &Vec<Pixel>, width: u32) -> (Vec<Option<usize>>, Vec<Floss>)
+fn reduce<C>(num_colors: usize, pixels: &[Pixel], width: u32) -> (Vec<Option<usize>>, Vec<Floss>)
 where
     C: Color + From<Rgb> + Sync + Send + 'static,
 {
@@ -72,13 +72,13 @@ where
     (reduced, palette)
 }
 
-fn find_index_of_closest<'a, C>(color: &C, palette: &Vec<Floss<'a>>) -> usize
+fn find_index_of_closest<'a, C>(color: &C, palette: &[Floss<'a>]) -> usize
 where
     C: Color + From<Rgb> + Sync + Send + 'static,
 {
     palette
         .iter()
-        .map(|floss| C::from(floss.color).dist(&color))
+        .map(|floss| C::from(floss.color).dist(color))
         .enumerate()
         .min_by(|(_, dist1), (_, dist2)| dist1.partial_cmp(dist2).unwrap())
         .unwrap()
@@ -105,15 +105,15 @@ fn render(
     )?;
     print_css(&mut file, &palette)?;
     write!(file, "</style></head><body>")?;
-    print_display_table(&mut file, &bmp, &reduced)?;
+    print_display_table(&mut file, bmp, &reduced)?;
     print_palette(&mut file, &palette, counts)?;
-    print_printable_table(&mut file, &bmp, &reduced)?;
+    print_printable_table(&mut file, bmp, &reduced)?;
     write!(file, "</body></html>")?;
 
     Ok(())
 }
 
-fn print_css(file: &mut File, palette: &Vec<Floss>) -> std::io::Result<()> {
+fn print_css(file: &mut File, palette: &[Floss]) -> std::io::Result<()> {
     write!(file, "
 html {{ font-size: 7pt; font-family: monospace; }}
 table {{ border-collapse: collapse; }}
@@ -159,7 +159,7 @@ h2 {{ page-break-before: always; }}"
 fn print_display_table(
     file: &mut File,
     bmp: &Bmp,
-    reduced: &Vec<Option<usize>>,
+    reduced: &[Option<usize>],
 ) -> std::io::Result<()> {
     writeln!(file, "<table class=\"display\">")?;
     let width = bmp.header.width as usize;
@@ -181,7 +181,7 @@ fn print_display_table(
     Ok(())
 }
 
-fn print_palette(file: &mut File, palette: &Vec<Floss>, counts: Vec<i32>) -> std::io::Result<()> {
+fn print_palette(file: &mut File, palette: &[Floss], counts: Vec<i32>) -> std::io::Result<()> {
     write!(
         file,
         "
@@ -205,7 +205,7 @@ fn print_palette(file: &mut File, palette: &Vec<Floss>, counts: Vec<i32>) -> std
 fn print_printable_table(
     file: &mut File,
     bmp: &Bmp,
-    reduced: &Vec<Option<usize>>,
+    reduced: &[Option<usize>],
 ) -> std::io::Result<()> {
     const BLOCK_SIZE: usize = 40;
     let width = bmp.header.width as usize;

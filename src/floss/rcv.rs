@@ -3,7 +3,7 @@ use crate::floss::flosses::Floss;
 use rayon::prelude::*;
 use std::cmp::Ordering;
 
-pub fn vote<'a, C>(k: usize, pixels: &Vec<C>, flosses: Vec<Floss<'a>>) -> Vec<Floss<'a>>
+pub fn vote<'a, C>(k: usize, pixels: &[C], flosses: Vec<Floss<'a>>) -> Vec<Floss<'a>>
 where
     C: Color + From<Rgb> + Sync + Send + 'static,
 {
@@ -52,17 +52,19 @@ where
     flosses
         .iter()
         .zip(eliminated.iter())
-        .filter_map(|(floss, &is_eliminated)| {
-            if is_eliminated {
-                None
-            } else {
-                Some(floss.clone())
-            }
-        })
+        .filter_map(
+            |(floss, &is_eliminated)| {
+                if is_eliminated {
+                    None
+                } else {
+                    Some(*floss)
+                }
+            },
+        )
         .collect()
 }
 
-fn make_ballot<C>(pixel: &C, flosses: &Vec<(usize, C)>) -> Vec<usize>
+fn make_ballot<C>(pixel: &C, flosses: &[(usize, C)]) -> Vec<usize>
 where
     C: Color,
 {
@@ -74,11 +76,10 @@ where
     measured.drain(..).map(|m| *m.0).collect()
 }
 
-fn cast_ballot(mut tally: Vec<u32>, ballot: &Vec<usize>, eliminated: &Vec<bool>) -> Vec<u32> {
+fn cast_ballot(mut tally: Vec<u32>, ballot: &[usize], eliminated: &[bool]) -> Vec<u32> {
     let index = *ballot
         .iter()
-        .skip_while(|&&i| eliminated[i])
-        .next()
+        .find(|&&i| !eliminated[i])
         .unwrap();
     tally[index] += 1;
     tally

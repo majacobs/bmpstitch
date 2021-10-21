@@ -1,13 +1,12 @@
 use std::cmp::PartialEq;
 use std::convert::From;
-use std::hash::Hash;
 
 pub trait Color: Copy + Clone {
     fn dist(&self, other: &Self) -> f32;
     fn name(&self) -> String;
 }
 
-#[derive(Debug, Copy, Clone, Hash)]
+#[derive(Debug, Copy, Clone)]
 pub struct Rgb {
     pub r: u8,
     pub g: u8,
@@ -23,17 +22,9 @@ pub struct RgbLinear {
 
 impl Rgb {
     pub fn new(r: u8, g: u8, b: u8) -> Self {
-        Rgb { r: r, g: g, b: b }
+        Rgb { r, g, b }
     }
 }
-
-impl PartialEq for Rgb {
-    fn eq(&self, other: &Self) -> bool {
-        self.r == other.r && self.g == other.g && self.b == other.b
-    }
-}
-
-impl Eq for Rgb {}
 
 impl Color for Rgb {
     fn dist(&self, other: &Self) -> f32 {
