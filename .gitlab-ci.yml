@@ -3,4 +3,5 @@ image: "rust:latest"
 clippy:
   script:
     - rustc --version && cargo --version
+    - rustup component add clippy
     - cargo clippy
