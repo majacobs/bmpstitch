@@ -77,10 +77,7 @@ where
 }
 
 fn cast_ballot(mut tally: Vec<u32>, ballot: &[usize], eliminated: &[bool]) -> Vec<u32> {
-    let index = *ballot
-        .iter()
-        .find(|&&i| !eliminated[i])
-        .unwrap();
+    let index = *ballot.iter().find(|&&i| !eliminated[i]).unwrap();
     tally[index] += 1;
     tally
 }
