@@ -39,8 +39,8 @@ fn main() {
         .decode()
         .expect("Unable to decode image");
     let img_rgba = img.as_rgba8().expect("Image is not RGBA");
-    let (reduced, palette) = reduce(num_colors, &img_rgba);
-    render(reduced, palette, &img_rgba, output_name).unwrap();
+    let (reduced, palette) = reduce(num_colors, img_rgba);
+    render(reduced, palette, img_rgba, output_name).unwrap();
 }
 
 fn print_usage() {
@@ -61,9 +61,9 @@ fn reduce(num_colors: usize, img: &RgbaImage) -> (Vec<Option<usize>>, Vec<Floss>
             continue;
         }
 
-        let pixel_with_error = ditherer.apply_error(&pixel);
+        let pixel_with_error = ditherer.apply_error(pixel);
         let palette_index = find_index_of_closest(&pixel_with_error, &palette);
-        ditherer.record_error(&pixel, &palette[palette_index].color);
+        ditherer.record_error(pixel, &palette[palette_index].color);
 
         reduced.push(Some(palette_index));
         ditherer.next();

@@ -4,7 +4,7 @@ use image::{buffer::Pixels, Rgba};
 use rayon::prelude::*;
 use std::cmp::Ordering;
 
-pub fn vote<'p>(k: usize, pixels: Pixels<'p, Rgba<u8>>, flosses: Vec<Floss>) -> Vec<Floss> {
+pub fn vote(k: usize, pixels: Pixels<'_, Rgba<u8>>, flosses: Vec<Floss>) -> Vec<Floss> {
     if flosses.len() <= k {
         return flosses;
     }
@@ -17,7 +17,7 @@ pub fn vote<'p>(k: usize, pixels: Pixels<'p, Rgba<u8>>, flosses: Vec<Floss>) -> 
 
     let ballots: Vec<_> = pixels
         .par_bridge()
-        .map(|p| make_ballot(&p, &converted_flosses))
+        .map(|p| make_ballot(p, &converted_flosses))
         .collect();
 
     let floss_count = flosses.len();
