@@ -1,5 +1,5 @@
-use crate::bitmap::Bmp;
 use crate::floss::flosses::Floss;
+use image::RgbaImage;
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -11,7 +11,7 @@ const SYMBOLS: [char; 26] = [
 pub fn render(
     reduced: Vec<Option<usize>>,
     palette: Vec<Floss>,
-    bmp: &Bmp,
+    img: &RgbaImage,
     output_name: String,
 ) -> std::io::Result<()> {
     let mut counts: Vec<i32> = palette.iter().map(|_| 0).collect();
@@ -28,9 +28,9 @@ pub fn render(
     )?;
     print_css(&mut file, &palette)?;
     write!(file, "</style></head><body>")?;
-    print_display_table(&mut file, bmp, &reduced)?;
+    print_display_table(&mut file, img, &reduced)?;
     print_palette(&mut file, &palette, counts)?;
-    print_printable_table(&mut file, bmp, &reduced)?;
+    print_printable_table(&mut file, img, &reduced)?;
     write!(file, "</body></html>")?;
 
     Ok(())
@@ -60,9 +60,9 @@ table.display .symbol-{0} {{ background-color: #{1:02x}{2:02x}{3:02x}; }}
 .printable .symbol-{0}::before,
 #palette .symbol-{0}::before {{ content: '{4}'; }}",
             i,
-            floss.color.r,
-            floss.color.g,
-            floss.color.b,
+            floss.color.0[0],
+            floss.color.0[1],
+            floss.color.0[2],
             symbol(i)
         )?;
     }
@@ -81,11 +81,11 @@ h2 {{ page-break-before: always; }}"
 
 fn print_display_table(
     file: &mut File,
-    bmp: &Bmp,
+    img: &RgbaImage,
     reduced: &[Option<usize>],
 ) -> std::io::Result<()> {
     writeln!(file, "<table class=\"display\">")?;
-    let width = bmp.header.width as usize;
+    let width = img.width() as usize;
     for (i, palette_index) in reduced.iter().enumerate() {
         if i % width == 0 {
             writeln!(file, "<tr>")?;
@@ -127,13 +127,13 @@ fn print_palette(file: &mut File, palette: &[Floss], counts: Vec<i32>) -> std::i
 
 fn print_printable_table(
     file: &mut File,
-    bmp: &Bmp,
+    img: &RgbaImage,
     reduced: &[Option<usize>],
 ) -> std::io::Result<()> {
     const BLOCK_SIZE: usize = 40;
-    let width = bmp.header.width as usize;
-    let x_block_count = ((bmp.header.width as f32) / (BLOCK_SIZE as f32)).ceil() as usize;
-    let y_block_count = ((bmp.header.height as f32) / (BLOCK_SIZE as f32)).ceil() as usize;
+    let width = img.width() as usize;
+    let x_block_count = ((img.width() as f32) / (BLOCK_SIZE as f32)).ceil() as usize;
+    let y_block_count = ((img.height() as f32) / (BLOCK_SIZE as f32)).ceil() as usize;
 
     for y_block in 0..y_block_count {
         for x_block in 0..x_block_count {

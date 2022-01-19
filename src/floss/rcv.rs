@@ -1,25 +1,23 @@
-use crate::color::{Color, Rgb};
+use crate::color::Distance;
 use crate::floss::flosses::Floss;
+use image::{buffer::Pixels, Rgba};
 use rayon::prelude::*;
 use std::cmp::Ordering;
 
-pub fn vote<'a, C>(k: usize, pixels: &[C], flosses: Vec<Floss<'a>>) -> Vec<Floss<'a>>
-where
-    C: Color + From<Rgb> + Sync + Send + 'static,
-{
+pub fn vote<'p>(k: usize, pixels: Pixels<'p, Rgba<u8>>, flosses: Vec<Floss>) -> Vec<Floss> {
     if flosses.len() <= k {
         return flosses;
     }
 
-    let converted_flosses: Vec<(usize, C)> = flosses
+    let converted_flosses: Vec<(usize, image::Rgba<u8>)> = flosses
         .iter()
         .enumerate()
-        .map(|(i, f)| (i, f.color.into()))
+        .map(|(i, f)| (i, f.color))
         .collect();
 
     let ballots: Vec<_> = pixels
-        .par_iter()
-        .map(|p| make_ballot(p, &converted_flosses))
+        .par_bridge()
+        .map(|p| make_ballot(&p, &converted_flosses))
         .collect();
 
     let floss_count = flosses.len();
@@ -64,13 +62,10 @@ where
         .collect()
 }
 
-fn make_ballot<C>(pixel: &C, flosses: &[(usize, C)]) -> Vec<usize>
-where
-    C: Color,
-{
+fn make_ballot(pixel: &Rgba<u8>, flosses: &[(usize, Rgba<u8>)]) -> Vec<usize> {
     let mut measured: Vec<_> = flosses
         .iter()
-        .map(|(i, floss_color)| (i, pixel.dist(floss_color)))
+        .map(|(i, floss_color)| (i, pixel.distance(floss_color)))
         .collect();
     measured.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
     measured.drain(..).map(|m| *m.0).collect()

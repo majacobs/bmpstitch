@@ -1,18 +1,18 @@
+extern crate image;
 extern crate rand;
 extern crate rayon;
 
-mod bitmap;
 mod color;
 mod dithering;
 mod floss;
 mod render;
 
-use crate::bitmap::{Bmp, Pixel};
-use crate::color::{Color, Rgb, RgbLinear};
+use crate::color::Distance;
 use crate::dithering::Ditherer;
 use crate::floss::flosses::{get_dmc_floss, Floss};
 use crate::floss::rcv::vote;
 use crate::render::render;
+use image::{io::Reader as ImageReader, RgbaImage};
 use std::env;
 
 fn main() {
@@ -34,36 +34,36 @@ fn main() {
     let bitmap_name = args[2].to_string();
     let output_name = args[3].to_string();
 
-    let bmp = Bmp::new(bitmap_name).unwrap();
-    let (reduced, palette) = reduce::<RgbLinear>(num_colors, &bmp.pixels, bmp.header.width);
-    render(reduced, palette, &bmp, output_name).unwrap();
+    let img = ImageReader::open(bitmap_name)
+        .expect("Unable to open image")
+        .decode()
+        .expect("Unable to decode image");
+    let img_rgba = img.as_rgba8().expect("Image is not RGBA");
+    let (reduced, palette) = reduce(num_colors, &img_rgba);
+    render(reduced, palette, &img_rgba, output_name).unwrap();
 }
 
 fn print_usage() {
     println!("<color count> <input bitmap> <output html>");
 }
 
-fn reduce<C>(num_colors: usize, pixels: &[Pixel], width: u32) -> (Vec<Option<usize>>, Vec<Floss>)
-where
-    C: Color + From<Rgb> + Sync + Send + 'static,
-{
-    let pixel_parts: Vec<C> = pixels.iter().map(|p| p.color.into()).collect();
+fn reduce(num_colors: usize, img: &RgbaImage) -> (Vec<Option<usize>>, Vec<Floss>) {
     let all_floss = get_dmc_floss();
-    let mut palette = vote(num_colors, &pixel_parts, all_floss);
+    let mut palette = vote(num_colors, img.pixels(), all_floss);
 
     palette.sort_by_cached_key(|floss| floss.number.parse::<i32>().ok());
 
     let mut reduced = Vec::new();
-    let mut ditherer = Ditherer::new(width as usize);
-    for pixel in pixels.iter() {
-        if pixel.alpha < 128u8 {
+    let mut ditherer = Ditherer::new(img.width() as usize);
+    for pixel in img.pixels() {
+        if pixel.0[3] < 128u8 {
             reduced.push(None);
             continue;
         }
 
-        let color_c: C = ditherer.apply_error(&pixel.color).into();
-        let palette_index = find_index_of_closest(&color_c, &palette);
-        ditherer.record_error(&pixel.color, &palette[palette_index].color);
+        let pixel_with_error = ditherer.apply_error(&pixel);
+        let palette_index = find_index_of_closest(&pixel_with_error, &palette);
+        ditherer.record_error(&pixel, &palette[palette_index].color);
 
         reduced.push(Some(palette_index));
         ditherer.next();
@@ -72,13 +72,10 @@ where
     (reduced, palette)
 }
 
-fn find_index_of_closest<'a, C>(color: &C, palette: &[Floss<'a>]) -> usize
-where
-    C: Color + From<Rgb> + Sync + Send + 'static,
-{
+fn find_index_of_closest(color: &image::Rgba<u8>, palette: &[Floss]) -> usize {
     palette
         .iter()
-        .map(|floss| C::from(floss.color).dist(color))
+        .map(|floss| floss.color.distance(color))
         .enumerate()
         .min_by(|(_, dist1), (_, dist2)| dist1.partial_cmp(dist2).unwrap())
         .unwrap()

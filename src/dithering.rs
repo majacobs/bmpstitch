@@ -1,6 +1,6 @@
-use crate::color::Rgb;
+use image::Rgba;
 use std::collections::vec_deque::VecDeque;
-use std::ops::{Add, AddAssign, Mul, Sub};
+use std::ops::{Add, AddAssign, Mul};
 
 const MINIMIZED_AVERAGE_ERROR_WEIGHTS: [[f32; 5]; 3] = [
     [0.0, 0.0, 0.0, 7.0 / 48.0, 5.0 / 48.0],
@@ -39,12 +39,16 @@ impl Ditherer {
         }
     }
 
-    pub fn apply_error(&self, color: &Rgb) -> Rgb {
+    pub fn apply_error(&self, color: &image::Rgba<u8>) -> image::Rgba<u8> {
         *color + self.error_rows[0][self.index_in_row]
     }
 
-    pub fn record_error(&mut self, original: &Rgb, closest: &Rgb) {
-        let error = *original - *closest;
+    pub fn record_error(&mut self, original: &Rgba<u8>, closest: &Rgba<u8>) {
+        let error = QuantizationError {
+            r: original.0[0] as i16 - closest.0[0] as i16,
+            g: original.0[1] as i16 - closest.0[1] as i16,
+            b: original.0[2] as i16 - closest.0[2] as i16,
+        };
 
         let weight_index_offset = (MINIMIZED_AVERAGE_ERROR_WEIGHTS[0].len() - 1) / 2;
         for (r_index, row) in MINIMIZED_AVERAGE_ERROR_WEIGHTS.iter().enumerate() {
@@ -74,7 +78,7 @@ impl QuantizationError {
     }
 }
 
-impl Add<QuantizationError> for Rgb {
+impl Add<QuantizationError> for Rgba<u8> {
     type Output = Self;
 
     fn add(self, rhs: QuantizationError) -> Self {
@@ -82,23 +86,12 @@ impl Add<QuantizationError> for Rgb {
             value.min(u8::MAX as i16).max(u8::MIN as i16) as u8
         }
 
-        Self {
-            r: clamp(self.r as i16 + rhs.r),
-            g: clamp(self.g as i16 + rhs.g),
-            b: clamp(self.b as i16 + rhs.b),
-        }
-    }
-}
-
-impl Sub for Rgb {
-    type Output = QuantizationError;
-
-    fn sub(self, rhs: Self) -> QuantizationError {
-        QuantizationError {
-            r: self.r as i16 - rhs.r as i16,
-            g: self.g as i16 - rhs.g as i16,
-            b: self.b as i16 - rhs.b as i16,
-        }
+        Self([
+            clamp(self.0[0] as i16 + rhs.r),
+            clamp(self.0[1] as i16 + rhs.g),
+            clamp(self.0[2] as i16 + rhs.b),
+            self.0[3],
+        ])
     }
 }
 
