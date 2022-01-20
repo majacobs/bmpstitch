@@ -1,5 +1,6 @@
 use crate::floss::flosses::Floss;
-use image::RgbaImage;
+use image::{png::PngEncoder, ColorType, Rgba, RgbaImage};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -9,17 +10,22 @@ const SYMBOLS: [char; 26] = [
 ];
 
 pub fn render(
-    reduced: Vec<Option<usize>>,
-    palette: Vec<Floss>,
-    img: &RgbaImage,
+    reduced: RgbaImage,
+    mut palette: Vec<Floss>,
     output_name: String,
 ) -> std::io::Result<()> {
-    let mut counts: Vec<i32> = palette.iter().map(|_| 0).collect();
-    for &palette_index in reduced.iter() {
-        if let Some(index) = palette_index {
-            counts[index] += 1;
-        }
+    let mut color_counts: HashMap<Rgba<u8>, u32> = HashMap::new();
+    for pixel in reduced.pixels() {
+        let count = color_counts.entry(*pixel).or_default();
+        *count += 1;
     }
+
+    palette.retain(|floss| color_counts.contains_key(&floss.color));
+    let color_indices: HashMap<Rgba<u8>, usize> = palette
+        .iter()
+        .enumerate()
+        .map(|(i, floss)| (floss.color, i))
+        .collect();
 
     let mut file = File::create(output_name)?;
     write!(
@@ -28,9 +34,9 @@ pub fn render(
     )?;
     print_css(&mut file, &palette)?;
     write!(file, "</style></head><body>")?;
-    print_display_table(&mut file, img, &reduced)?;
-    print_palette(&mut file, &palette, counts)?;
-    print_printable_table(&mut file, img, &reduced)?;
+    print_image(&mut file, &reduced)?;
+    print_palette(&mut file, &palette, color_counts)?;
+    print_pattern(&mut file, &reduced, color_indices)?;
     write!(file, "</body></html>")?;
 
     Ok(())
@@ -40,8 +46,6 @@ fn print_css(file: &mut File, palette: &[Floss]) -> std::io::Result<()> {
     write!(file, "
 html {{ font-size: 7pt; font-family: monospace; }}
 table {{ border-collapse: collapse; }}
-.display td {{ width: 0.4em; line-height: 0.4em; padding: 0; }}
-.display tr {{ height: 0.4em; }}
 .printable td {{ width: 1em; line-height: 1em; padding: 0; text-align: center; vertical-align: middle; }}
 .printable tr {{ height: 1em; }}
 .printable td {{ border: 1px solid #ccc; }}
@@ -56,7 +60,6 @@ table {{ border-collapse: collapse; }}
 
 .color-{0} {{ background-color: #{1:02x}{2:02x}{3:02x}; }}
 table.printable .symbol-{0} {{ background-color: #{1:02x}{2:02x}{3:02x}40; }}
-table.display .symbol-{0} {{ background-color: #{1:02x}{2:02x}{3:02x}; }}
 .printable .symbol-{0}::before,
 #palette .symbol-{0}::before {{ content: '{4}'; }}",
             i,
@@ -79,39 +82,41 @@ h2 {{ page-break-before: always; }}"
     Ok(())
 }
 
-fn print_display_table(
-    file: &mut File,
-    img: &RgbaImage,
-    reduced: &[Option<usize>],
-) -> std::io::Result<()> {
-    writeln!(file, "<table class=\"display\">")?;
-    let width = img.width() as usize;
-    for (i, palette_index) in reduced.iter().enumerate() {
-        if i % width == 0 {
-            writeln!(file, "<tr>")?;
-        }
-        if let Some(index) = palette_index {
-            writeln!(file, "<td class=\"symbol-{}\"></td>", index)?;
-        } else {
-            writeln!(file, "<td></td>")?;
-        }
-        if i % width + 1 == width {
-            writeln!(file, "</tr>")?;
-        }
-    }
-    write!(file, "</table>")?;
+fn print_image(file: &mut File, reduced: &RgbaImage) -> std::io::Result<()> {
+    let mut buffer = vec![];
+    let encoder = PngEncoder::new(&mut buffer);
+    encoder
+        .encode(
+            reduced.as_raw(),
+            reduced.width(),
+            reduced.height(),
+            ColorType::Rgba8,
+        )
+        .unwrap();
+    let b64 = base64::encode(buffer);
+    writeln!(
+        file,
+        "<img src=\"data:image/png;base64,{}\" style=\"width: {}px; image-rendering: pixelated;\">",
+        b64,
+        reduced.width() * 5
+    )?;
 
     Ok(())
 }
 
-fn print_palette(file: &mut File, palette: &[Floss], counts: Vec<i32>) -> std::io::Result<()> {
+fn print_palette(
+    file: &mut File,
+    palette: &[Floss],
+    counts: HashMap<Rgba<u8>, u32>,
+) -> std::io::Result<()> {
     write!(
         file,
         "
 <div id=\"palette\">
 <table>"
     )?;
-    for (i, (floss, count)) in palette.iter().zip(counts.iter()).enumerate() {
+    for (i, floss) in palette.iter().enumerate() {
+        let count = counts.get(&floss.color).unwrap();
         let name = format!("#{0} {1}", floss.number, floss.name);
 
         write!(file, "
@@ -125,30 +130,29 @@ fn print_palette(file: &mut File, palette: &[Floss], counts: Vec<i32>) -> std::i
     Ok(())
 }
 
-fn print_printable_table(
+fn print_pattern(
     file: &mut File,
-    img: &RgbaImage,
-    reduced: &[Option<usize>],
+    reduced: &RgbaImage,
+    color_indices: HashMap<Rgba<u8>, usize>,
 ) -> std::io::Result<()> {
     const BLOCK_SIZE: usize = 40;
-    let width = img.width() as usize;
-    let x_block_count = ((img.width() as f32) / (BLOCK_SIZE as f32)).ceil() as usize;
-    let y_block_count = ((img.height() as f32) / (BLOCK_SIZE as f32)).ceil() as usize;
+    let x_block_count = ((reduced.width() as f32) / (BLOCK_SIZE as f32)).ceil() as usize;
+    let y_block_count = ((reduced.height() as f32) / (BLOCK_SIZE as f32)).ceil() as usize;
 
     for y_block in 0..y_block_count {
         for x_block in 0..x_block_count {
             let block = reduced
-                .chunks(width)
+                .rows()
                 .skip(y_block * BLOCK_SIZE)
                 .take(BLOCK_SIZE)
-                .map(|c| c.iter().skip(x_block * BLOCK_SIZE).take(BLOCK_SIZE));
+                .map(|c| c.skip(x_block * BLOCK_SIZE).take(BLOCK_SIZE));
 
             writeln!(file, "<h2>Block {},{}</h2>", x_block, y_block)?;
             writeln!(file, "<table class=\"printable\">")?;
             for row in block {
                 writeln!(file, "<tr>")?;
-                for color_index in row {
-                    if let Some(index) = color_index {
+                for color in row {
+                    if let Some(index) = color_indices.get(color) {
                         writeln!(file, "<td class=\"symbol-{}\"></td>", index)?;
                     } else {
                         writeln!(file, "<td></td>")?;
