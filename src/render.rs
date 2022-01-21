@@ -4,9 +4,23 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
 
-const SYMBOLS: [char; 26] = [
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
-    'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+const SYMBOLS: [char; 100] = [
+    // Upper alpha
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+    // Lower alpha
+    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+    // Geometric shapes
+    '\u{2bc5}', '\u{2bc0}', '\u{2bc1}', '\u{2b1f}', '\u{2b23}', '\u{1f787}', '\u{1f78a}', '\u{1f791}', '\u{1f794}', '\u{1f79a}',
+    // Arrows
+    '\u{1f868}', '\u{1f86a}', '\u{1f869}', '\u{1f86b}', '\u{1f86c}', '\u{1f86d}', '\u{1f86f}', '\u{1f86e}',
+    // Circled numbers
+    '\u{2780}', '\u{2781}', '\u{2782}', '\u{2783}', '\u{2784}', '\u{2785}', '\u{2786}', '\u{2787}', '\u{2788}', '\u{2789}',
+    // Card suits
+    '\u{2663}', '\u{2666}', '\u{2665}', '\u{2660}',
+    // Dice
+    '\u{2680}', '\u{2681}', '\u{2682}', '\u{2683}', '\u{2684}', '\u{2685}',
+    // Digits
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
 ];
 
 pub fn render(
