@@ -17,7 +17,7 @@ pub fn vote(k: usize, pixels: Pixels<'_, Rgba<u8>>, flosses: Vec<Floss>) -> Vec<
 
     let ballots: Vec<_> = pixels
         .par_bridge()
-        .map(|p| make_ballot(p, &converted_flosses))
+        .filter_map(|p| make_ballot(p, &converted_flosses))
         .collect();
 
     let floss_count = flosses.len();
@@ -32,8 +32,19 @@ pub fn vote(k: usize, pixels: Pixels<'_, Rgba<u8>>, flosses: Vec<Floss>) -> Vec<
             )
             .reduce(|| vec![0; floss_count], merge_tallies);
 
-        let mut remaining = 0;
         let min = *tallies.iter().filter(|&&t| t > 0).min().unwrap();
+        let all_way_tie = tallies.iter().all(|&t| t == 0 || t == min);
+        let surviving_candiates = tallies.iter().filter(|&&t| t > 0).count();
+        if all_way_tie || surviving_candiates <= k {
+            for (is_eliminated, count) in eliminated.iter_mut().zip(tallies) {
+                if count == 0 {
+                    *is_eliminated = true;
+                }
+            }
+            break;
+        }
+
+        let mut remaining = 0;
         for (is_eliminated, count) in eliminated.iter_mut().zip(tallies) {
             if count <= min {
                 *is_eliminated = true;
@@ -62,13 +73,18 @@ pub fn vote(k: usize, pixels: Pixels<'_, Rgba<u8>>, flosses: Vec<Floss>) -> Vec<
         .collect()
 }
 
-fn make_ballot(pixel: &Rgba<u8>, flosses: &[(usize, Rgba<u8>)]) -> Vec<usize> {
+fn make_ballot(pixel: &Rgba<u8>, flosses: &[(usize, Rgba<u8>)]) -> Option<Vec<usize>> {
+    if pixel.0[3] == 0 {
+        // Fully transparent pixels don't get a vote.
+        return None;
+    }
+
     let mut measured: Vec<_> = flosses
         .iter()
         .map(|(i, floss_color)| (i, pixel.distance(floss_color)))
         .collect();
     measured.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
-    measured.drain(..).map(|m| *m.0).collect()
+    Some(measured.drain(..).map(|m| *m.0).collect())
 }
 
 fn cast_ballot(mut tally: Vec<u32>, ballot: &[usize], eliminated: &[bool]) -> Vec<u32> {

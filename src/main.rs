@@ -19,7 +19,7 @@ use std::env;
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 3 {
+    if args.len() < 4 {
         print_usage();
         return;
     }
@@ -35,20 +35,22 @@ fn main() {
     let bitmap_name = args[2].to_string();
     let output_name = args[3].to_string();
 
+    let dither = args.len() >= 5 && args[4] == "dither";
+
     let img = ImageReader::open(bitmap_name)
         .expect("Unable to open image")
         .decode()
         .expect("Unable to decode image");
     let img_rgba = img.as_rgba8().expect("Image is not RGBA");
-    let (reduced, palette) = reduce(num_colors, img_rgba);
+    let (reduced, palette) = reduce(num_colors, img_rgba, dither);
     render(reduced, palette, output_name).unwrap();
 }
 
 fn print_usage() {
-    println!("<color count> <input bitmap> <output html>");
+    println!("<color count> <input bitmap> <output html> [dithering]");
 }
 
-fn reduce(num_colors: usize, img: &RgbaImage) -> (RgbaImage, Vec<Floss>) {
+fn reduce(num_colors: usize, img: &RgbaImage, dither: bool) -> (RgbaImage, Vec<Floss>) {
     let all_floss = get_dmc_floss();
     let mut palette = vote(num_colors, img.pixels(), all_floss);
 
@@ -63,12 +65,17 @@ fn reduce(num_colors: usize, img: &RgbaImage) -> (RgbaImage, Vec<Floss>) {
             continue;
         }
 
-        let pixel_with_error = ditherer.apply_error(pixel);
-        let closest = find_closest(&pixel_with_error, &palette);
-        ditherer.record_error(pixel, closest);
+        if dither {
+            let pixel_with_error = ditherer.apply_error(pixel);
+            let closest = find_closest(&pixel_with_error, &palette);
+            ditherer.record_error(pixel, closest);
 
-        reduced.put_pixel(x, y, *closest);
-        ditherer.next();
+            reduced.put_pixel(x, y, *closest);
+            ditherer.next();
+        } else {
+            let closest = find_closest(&pixel, &palette);
+            reduced.put_pixel(x, y, *closest);
+        }
     }
 
     (reduced, palette)
